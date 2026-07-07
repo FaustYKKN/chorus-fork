@@ -1410,6 +1410,7 @@
     "clientClaudeCode": "Claude Code",
     "clientOpenclaw": "OpenClaw",
     "clientCodex": "Codex",
+    "clientOpencode": "OpenCode",
     "clientUnknown": "Unknown client",
     "uptimeMonoDays": "{days}d {time}",
     "mobileBack": "Connections",

@@ -30,12 +30,15 @@ export function backendCli(agentType) {
  * Map the resolved agent backend to the `clientType` the daemon self-reports to
  * the server (and that the connection registry + presence UI display). The server
  * gates this against DAEMON_CLIENT_TYPES, so the values MUST match: `codex` →
- * `codex`, `claude-code` → `claude_code`. Anything else falls back to claude_code.
+ * `codex`, `opencode` → `opencode`, `claude-code` → `claude_code`. Anything else
+ * falls back to claude_code.
  * @param {string} agentType
  * @returns {string}
  */
 export function backendClientType(agentType) {
-  return agentType === "codex" ? "codex" : "claude_code";
+  if (agentType === "codex") return "codex";
+  if (agentType === "opencode") return "opencode";
+  return "claude_code";
 }
 
 /**

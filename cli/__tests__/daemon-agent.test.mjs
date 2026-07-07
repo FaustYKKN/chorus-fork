@@ -70,7 +70,7 @@ describe("backendClientType — agentType → self-reported clientType", () => {
     expect(backendClientType(undefined)).toBe("claude_code");
     expect(backendClientType("whatever")).toBe("claude_code");
   });
-  it("maps opencode → claude_code (server DAEMON_CLIENT_TYPES has no opencode value yet)", () => {
-    expect(backendClientType("opencode")).toBe("claude_code");
+  it("maps opencode → opencode", () => {
+    expect(backendClientType("opencode")).toBe("opencode");
   });
 });

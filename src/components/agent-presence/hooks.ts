@@ -94,6 +94,8 @@ export function useClientTypeLabel() {
           return t("clientOpenclaw");
         case "codex":
           return t("clientCodex");
+        case "opencode":
+          return t("clientOpencode");
         default:
           return t("clientUnknown");
       }
