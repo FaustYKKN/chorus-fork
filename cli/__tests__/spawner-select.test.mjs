@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { selectSpawner } from "../spawner-select.mjs";
 import { ClaudeSpawner } from "../claude-spawner.mjs";
 import { CodexSpawner } from "../codex-spawner.mjs";
+import { OpencodeSpawner } from "../opencode-spawner.mjs";
 
 const logger = { info() {}, warn() {}, error() {} };
 const creds = { url: "https://example.test", apiKey: "cho_test" };
@@ -21,9 +22,15 @@ describe("selectSpawner", () => {
     expect(s).toBeInstanceOf(CodexSpawner);
   });
 
+  it("returns an OpencodeSpawner for opencode", () => {
+    const s = selectSpawner("opencode", { logger, permissionMode: "yolo", creds });
+    expect(s).toBeInstanceOf(OpencodeSpawner);
+  });
+
   it("threads permissionMode into the selected spawner", () => {
     expect(selectSpawner("claude-code", { logger, permissionMode: "chorus", creds }).permissionMode).toBe("chorus");
     expect(selectSpawner("codex", { logger, permissionMode: "yolo", creds }).permissionMode).toBe("yolo");
+    expect(selectSpawner("opencode", { logger, permissionMode: "chorus", creds }).permissionMode).toBe("chorus");
   });
 
   it("defaults to claude-code when the agent type is unrecognized (no throw — selection is post-validation)", () => {
@@ -33,10 +40,12 @@ describe("selectSpawner", () => {
     expect(s).toBeInstanceOf(ClaudeSpawner);
   });
 
-  it("both backends expose a wake() method (shared contract)", () => {
+  it("all backends expose a wake() method (shared contract)", () => {
     const c = selectSpawner("claude-code", { logger, permissionMode: "yolo", creds });
     const x = selectSpawner("codex", { logger, permissionMode: "yolo", creds });
+    const o = selectSpawner("opencode", { logger, permissionMode: "yolo", creds });
     expect(typeof c.wake).toBe("function");
     expect(typeof x.wake).toBe("function");
+    expect(typeof o.wake).toBe("function");
   });
 });

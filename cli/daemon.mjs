@@ -29,6 +29,7 @@ import { Waker } from "./waker.mjs";
 import { LineageResolver } from "./lineage.mjs";
 import { resolveClaudePath } from "./claude-spawner.mjs";
 import { resolveCodexPath } from "./codex-spawner.mjs";
+import { resolveOpencodePath } from "./opencode-spawner.mjs";
 import { selectSpawner } from "./spawner-select.mjs";
 import {
   createExecutionUploadHooks,
@@ -480,10 +481,12 @@ export async function runDaemon(flags = {}, deps = {}) {
   const writeCreds = deps.writeLoginFile ?? writeLoginFile;
   const version = deps.version ?? readVersion();
   // Backend executable resolvers — injectable for tests. The SELECTED backend's
-  // resolver runs below (claude-code → findClaude, codex → findCodex), so the
-  // banner shows the right binary instead of always probing for `claude`.
+  // resolver runs below (claude-code → findClaude, codex → findCodex, opencode →
+  // findOpencode), so the banner shows the right binary instead of always
+  // probing for `claude`.
   const findClaude = deps.resolveClaudePath ?? resolveClaudePath;
   const findCodex = deps.resolveCodexPath ?? resolveCodexPath;
+  const findOpencode = deps.resolveOpencodePath ?? resolveOpencodePath;
   const verbose = flags.verbose === true || env.CHORUS_VERBOSE === "1";
 
   // Resolve the agent backend (default claude-code). An unknown --agent /
@@ -560,7 +563,8 @@ export async function runDaemon(flags = {}, deps = {}) {
   // arrives. The resolved path (or absence) is shown in the banner below. codex
   // → resolveCodexPath, otherwise resolveClaudePath — so a `--agent codex` run
   // probes (and the banner reports) `codex`, not `claude`.
-  const cliPath = agentType === "codex" ? findCodex() : findClaude();
+  const cliPath =
+    agentType === "codex" ? findCodex() : agentType === "opencode" ? findOpencode() : findClaude();
 
   // The daemon.json the layered config readers (credentials, sigint timeout, cwds)
   // consult. Surfacing its absolute path + presence in the banner makes it obvious

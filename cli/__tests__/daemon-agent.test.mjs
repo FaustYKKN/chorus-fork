@@ -30,9 +30,15 @@ describe("resolveAgentType — known backends", () => {
     });
   });
 
-  it("lists both backends in KNOWN_AGENTS and keeps claude-code default", () => {
+  it("accepts opencode via --agent flag and CHORUS_AGENT env", () => {
+    expect(resolveAgentType({ agent: "opencode" }, {})).toEqual({ ok: true, agent: "opencode" });
+    expect(resolveAgentType({}, { CHORUS_AGENT: "opencode" })).toEqual({ ok: true, agent: "opencode" });
+  });
+
+  it("lists all backends in KNOWN_AGENTS and keeps claude-code default", () => {
     expect(KNOWN_AGENTS).toContain("claude-code");
     expect(KNOWN_AGENTS).toContain("codex");
+    expect(KNOWN_AGENTS).toContain("opencode");
     expect(DEFAULT_AGENT).toBe("claude-code");
   });
 });
@@ -63,5 +69,8 @@ describe("backendClientType — agentType → self-reported clientType", () => {
   it("falls back to claude_code for unknown/undefined", () => {
     expect(backendClientType(undefined)).toBe("claude_code");
     expect(backendClientType("whatever")).toBe("claude_code");
+  });
+  it("maps opencode → claude_code (server DAEMON_CLIENT_TYPES has no opencode value yet)", () => {
+    expect(backendClientType("opencode")).toBe("claude_code");
   });
 });

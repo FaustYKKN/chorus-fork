@@ -4,9 +4,10 @@
 // (add-daemon-codex-backend cashed in the reserved `codex` slot). Resolving an
 // unknown value is a hard error (no silent fallback). Zero dependencies.
 
-/** The agent backends the daemon recognizes. Both are implemented (claude-code
- * via ClaudeSpawner, codex via CodexSpawner — see spawner-select.mjs). */
-export const KNOWN_AGENTS = ["claude-code", "codex"];
+/** The agent backends the daemon recognizes. All are implemented (claude-code
+ * via ClaudeSpawner, codex via CodexSpawner, opencode via OpencodeSpawner — see
+ * spawner-select.mjs). */
+export const KNOWN_AGENTS = ["claude-code", "codex", "opencode"];
 
 /** The default agent backend when neither --agent nor CHORUS_AGENT is set. */
 export const DEFAULT_AGENT = "claude-code";
@@ -21,6 +22,7 @@ export const DEFAULT_AGENT = "claude-code";
  */
 export function backendCli(agentType) {
   if (agentType === "codex") return { name: "codex", envVar: "CHORUS_CODEX_PATH" };
+  if (agentType === "opencode") return { name: "opencode", envVar: "CHORUS_OPENCODE_PATH" };
   return { name: "claude", envVar: "CHORUS_CLAUDE_PATH" };
 }
 

@@ -117,7 +117,7 @@ OPTIONS
   --url <url>              Remote Chorus server URL            (env: CHORUS_URL)
   --api-key <cho_...>      Agent API key                       (env: CHORUS_API_KEY)
   --agent <type>           Local agent backend to wake         (env: CHORUS_AGENT)
-                           (claude-code | codex; default: claude-code)
+                           (claude-code | codex | opencode; default: claude-code)
   --yolo                   Full autonomy for the woken agent   (env: CHORUS_YOLO=1)
                            (--dangerously-skip-permissions: Bash, file writes, any
                            command). This is the DEFAULT permission mode.
