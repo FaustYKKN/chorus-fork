@@ -133,6 +133,12 @@ OPTIONS
   --verbose                More detailed per-wake logging
   --sigint-timeout <ms>    Grace window after SIGINT before a forceful kill
                            (env: CHORUS_DAEMON_SIGINT_TIMEOUT; default 10000)
+                           Also configurable via ~/.chorus/daemon.json sigintTimeoutMs.
+                           Wake concurrency (max wakes running at once across all served
+                           paths) is env/config-only: CHORUS_WAKE_CONCURRENCY, or
+                           "wakeConcurrency" in ~/.chorus/daemon.json (default 4; set 1
+                           to serialize every wake — recommended when several tasks
+                           share one working directory).
   -h, --help               Show this help message
 
 CREDENTIALS

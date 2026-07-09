@@ -40,7 +40,12 @@ import { WAKE_ACTIONS } from "./prompts.mjs";
 import { createInterruptReporter } from "./interrupt-reporter.mjs";
 import { createTurnReporter } from "./turn-reporter.mjs";
 import { createControlHandler } from "./control-handler.mjs";
-import { resolveSigintTimeoutMs, resolveDaemonCwds } from "./daemon-config.mjs";
+import {
+  resolveSigintTimeoutMs,
+  resolveDaemonCwds,
+  resolveWakeConcurrency,
+  DEFAULT_WAKE_CONCURRENCY,
+} from "./daemon-config.mjs";
 import {
   startBackground,
   stopDaemon,
@@ -135,7 +140,16 @@ export function buildDaemon(creds, deps = {}) {
   // The WakeQueue serializes per DIRECT idea (keyFor's key). It is shared across all
   // path-connections: serialization-per-idea still holds, and maxConcurrency caps the
   // whole process's in-flight wakes rather than per-cwd — the right global budget.
-  const queue = new WakeQueue({ maxConcurrency: deps.maxConcurrency ?? 4, logger });
+  // The cap is operator-tunable (CHORUS_WAKE_CONCURRENCY / daemon.json
+  // wakeConcurrency): backends without per-wake isolation (opencode/codex edit the
+  // served directory in place) can set 1 to serialize the whole daemon.
+  const wakeConcurrency = deps.maxConcurrency ?? resolveWakeConcurrency();
+  if (wakeConcurrency !== DEFAULT_WAKE_CONCURRENCY) {
+    logger.info(
+      `[Chorus] wake concurrency: ${wakeConcurrency}${wakeConcurrency === 1 ? " (all wakes serialized)" : ""}`
+    );
+  }
+  const queue = new WakeQueue({ maxConcurrency: wakeConcurrency, logger });
 
   // ===== Multi-path: the SET of cwds this daemon serves (T3 — FR-5) =====
   // Each declared path becomes one INDEPENDENT connection (own SSE self-report + own

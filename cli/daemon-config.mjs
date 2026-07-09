@@ -20,6 +20,9 @@ import { loginFilePath } from "./credentials.mjs";
 /** Built-in default escalation window (ms) — matches the spec's 10 seconds. */
 export const DEFAULT_SIGINT_TIMEOUT_MS = 10_000;
 
+/** Built-in default wake concurrency — matches the WakeQueue's historical cap. */
+export const DEFAULT_WAKE_CONCURRENCY = 4;
+
 /**
  * Coerce a value to a positive finite integer of milliseconds, or undefined when it
  * is absent / not a usable number. Accepts a number or a numeric string (env vars
@@ -83,6 +86,47 @@ export function resolveSigintTimeoutMs(flags = {}, deps = {}) {
 
   // 4. Built-in default
   return DEFAULT_SIGINT_TIMEOUT_MS;
+}
+
+/**
+ * Resolve the WakeQueue's global concurrency cap (how many wakes may run at once
+ * across ALL of this daemon's connections). Per-key (per-idea) serialization is
+ * unconditional — this only bounds concurrency ACROSS keys. `1` serializes the
+ * whole daemon: useful when several tasks target the same working directory and
+ * the backend has no per-wake isolation (concurrent runs would edit the same
+ * files). Layered like resolveSigintTimeoutMs — first defined source wins:
+ *
+ *   CHORUS_WAKE_CONCURRENCY env > ~/.chorus/daemon.json `wakeConcurrency`
+ *                               > DEFAULT_WAKE_CONCURRENCY (4)
+ *
+ * Zero / negative / non-numeric values are ignored (fall through), so a typo
+ * degrades to the default instead of wedging the queue with a cap of 0.
+ *
+ * @param {{
+ *   env?: Record<string, string|undefined>,
+ *   readJson?: (path: string) => (Record<string, unknown>|null),
+ *   loginPath?: string,
+ * }} [deps]
+ * @returns {number}  Always a positive integer (the default when no source applies).
+ */
+export function resolveWakeConcurrency(deps = {}) {
+  const env = deps.env ?? process.env;
+  const readJson = deps.readJson ?? readJsonSafe;
+  const loginPath = deps.loginPath ?? loginFilePath();
+
+  // 1. Environment variable
+  const fromEnv = positiveIntMs(env.CHORUS_WAKE_CONCURRENCY);
+  if (fromEnv !== undefined) return fromEnv;
+
+  // 2. Login/config file (~/.chorus/daemon.json)
+  const file = readJson(loginPath);
+  if (file) {
+    const fromFile = positiveIntMs(file.wakeConcurrency);
+    if (fromFile !== undefined) return fromFile;
+  }
+
+  // 3. Built-in default
+  return DEFAULT_WAKE_CONCURRENCY;
 }
 
 // ===== Multi-path cwd set (T3 — 单 daemon 多路径引擎, FR-5/FR-8, DEC-2) =====

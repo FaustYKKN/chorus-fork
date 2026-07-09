@@ -7,6 +7,8 @@ import {
   resolveSigintTimeoutMs,
   DEFAULT_SIGINT_TIMEOUT_MS,
   resolveDaemonCwds,
+  resolveWakeConcurrency,
+  DEFAULT_WAKE_CONCURRENCY,
 } from "../daemon-config.mjs";
 
 describe("resolveSigintTimeoutMs layered precedence", () => {
@@ -147,5 +149,47 @@ describe("resolveDaemonCwds layered precedence", () => {
     expect(cwds).toEqual(["/dev/repo-a"]);
     // The result is a flat array of strings — no project info threaded anywhere.
     expect(cwds.every((c) => typeof c === "string")).toBe(true);
+  });
+});
+
+
+describe("resolveWakeConcurrency layered precedence", () => {
+  it("defaults to 4 when no source is present", () => {
+    const n = resolveWakeConcurrency({ env: {}, readJson: () => null });
+    expect(n).toBe(4);
+    expect(DEFAULT_WAKE_CONCURRENCY).toBe(4);
+  });
+
+  it("daemon.json wakeConcurrency overrides the default", () => {
+    const readJson = vi.fn(() => ({ wakeConcurrency: 2 }));
+    const n = resolveWakeConcurrency({ env: {}, readJson, loginPath: "/x/daemon.json" });
+    expect(n).toBe(2);
+    expect(readJson).toHaveBeenCalledWith("/x/daemon.json");
+  });
+
+  it("env overrides daemon.json", () => {
+    const n = resolveWakeConcurrency({
+      env: { CHORUS_WAKE_CONCURRENCY: "1" },
+      readJson: () => ({ wakeConcurrency: 8 }),
+    });
+    expect(n).toBe(1);
+  });
+
+  it("rejects zero / negative / garbage and falls through to the next source", () => {
+    // Garbage env falls through to a valid file value…
+    expect(
+      resolveWakeConcurrency({ env: { CHORUS_WAKE_CONCURRENCY: "0" }, readJson: () => ({ wakeConcurrency: 3 }) }),
+    ).toBe(3);
+    expect(
+      resolveWakeConcurrency({ env: { CHORUS_WAKE_CONCURRENCY: "-2" }, readJson: () => null }),
+    ).toBe(DEFAULT_WAKE_CONCURRENCY);
+    // …and a garbage file value falls through to the default.
+    expect(
+      resolveWakeConcurrency({ env: {}, readJson: () => ({ wakeConcurrency: "lots" }) }),
+    ).toBe(DEFAULT_WAKE_CONCURRENCY);
+  });
+
+  it("floors a fractional value", () => {
+    expect(resolveWakeConcurrency({ env: { CHORUS_WAKE_CONCURRENCY: "2.9" }, readJson: () => null })).toBe(2);
   });
 });
