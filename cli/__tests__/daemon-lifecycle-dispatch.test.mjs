@@ -141,6 +141,48 @@ describe("runDaemon — lifecycle action dispatch", () => {
     // restart must not silently discard a pidfile it couldn't verify.
     expect(lifecycle.stopDaemon).toHaveBeenCalledWith();
   });
+
+  it("restart's detached child re-exec STRIPS the action verb (self-cannibalize regression)", async () => {
+    // Re-execing `daemon restart` argv verbatim makes the child run `restart`
+    // again: it stops the pid in the pidfile — ITSELF, just written — and dies,
+    // leaving a stale pidfile and no daemon. The child must run the plain
+    // long-lived `daemon`.
+    const lifecycle = fakeLifecycle();
+    await runDaemon(
+      { action: "restart" },
+      {
+        lifecycle,
+        service: fakeService(),
+        log: () => {},
+        errLog: () => {},
+        env: {},
+        argv: ["/usr/bin/node", "/x/chorus.mjs", "daemon", "restart", "--agent", "opencode"],
+      }
+    );
+    const spawned = lifecycle.startBackground.mock.calls[0][0];
+    expect(spawned.args).toEqual(["/x/chorus.mjs", "daemon", "--agent", "opencode"]);
+  });
+
+  it("-d detach also strips -d but preserves ordinary flags", async () => {
+    const lifecycle = fakeLifecycle();
+    await runDaemon(
+      { detach: true, chorusOnly: true },
+      {
+        lifecycle,
+        service: fakeService(),
+        log: () => {},
+        errLog: () => {},
+        env: { CHORUS_URL: "http://x", CHORUS_API_KEY: "cho_k" },
+        resolve: () => ({ url: "http://x", apiKey: "cho_k", source: "env" }),
+        validate: async () => ({ name: "a", uuid: "u" }),
+        isTTY: false,
+        argv: ["/usr/bin/node", "/x/chorus.mjs", "daemon", "-d", "--agent", "opencode", "--cwd", "/p"],
+      }
+    );
+    const spawned = lifecycle.startBackground.mock.calls[0][0];
+    expect(spawned.args).toEqual(["/x/chorus.mjs", "daemon", "--agent", "opencode", "--cwd", "/p"]);
+    expect(spawned.env[DETACHED_ENV]).toBe("1");
+  });
 });
 
 describe("runDaemon — supervisor (systemd) delegation", () => {

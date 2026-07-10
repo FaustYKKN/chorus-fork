@@ -139,6 +139,11 @@ OPTIONS
                            "wakeConcurrency" in ~/.chorus/daemon.json (default 4; set 1
                            to serialize every wake — recommended when several tasks
                            share one working directory).
+                           Local console: the running daemon serves a loopback-only
+                           status + directory-whitelist page on http://127.0.0.1:8638.
+                           Disable with CHORUS_DAEMON_CONSOLE=0 (or "console": false
+                           in ~/.chorus/daemon.json); change the port with
+                           CHORUS_DAEMON_CONSOLE_PORT or "consolePort".
   -h, --help               Show this help message
 
 CREDENTIALS

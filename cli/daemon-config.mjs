@@ -129,6 +129,50 @@ export function resolveWakeConcurrency(deps = {}) {
   return DEFAULT_WAKE_CONCURRENCY;
 }
 
+/** Built-in default port of the daemon's LOCAL console (127.0.0.1 only). */
+export const DEFAULT_CONSOLE_PORT = 8638;
+
+/**
+ * Resolve the daemon local-console config (the 127.0.0.1 status/whitelist page
+ * served by the daemon itself). Layered like the other tunables — first defined
+ * source wins:
+ *
+ *   enabled: CHORUS_DAEMON_CONSOLE env ("0"/"false"/"off"/"no" disable, anything
+ *            else enables) > daemon.json `console` (boolean) > true
+ *   port:    CHORUS_DAEMON_CONSOLE_PORT env > daemon.json `consolePort` > 8638
+ *
+ * The console is loopback-only by design — `enabled` merely decides whether the
+ * daemon binds it at all. Invalid ports fall through to the default.
+ *
+ * @param {{
+ *   env?: Record<string, string|undefined>,
+ *   readJson?: (path: string) => (Record<string, unknown>|null),
+ *   loginPath?: string,
+ * }} [deps]
+ * @returns {{ enabled: boolean, port: number }}
+ */
+export function resolveConsoleConfig(deps = {}) {
+  const env = deps.env ?? process.env;
+  const readJson = deps.readJson ?? readJsonSafe;
+  const loginPath = deps.loginPath ?? loginFilePath();
+  const file = readJson(loginPath) ?? {};
+
+  let enabled = true;
+  const rawEnv = env.CHORUS_DAEMON_CONSOLE;
+  if (rawEnv !== undefined && String(rawEnv).trim() !== "") {
+    enabled = !["0", "false", "off", "no"].includes(String(rawEnv).trim().toLowerCase());
+  } else if (typeof file.console === "boolean") {
+    enabled = file.console;
+  }
+
+  const port =
+    positiveIntMs(env.CHORUS_DAEMON_CONSOLE_PORT) ??
+    positiveIntMs(file.consolePort) ??
+    DEFAULT_CONSOLE_PORT;
+
+  return { enabled, port };
+}
+
 // ===== Multi-path cwd set (T3 — 单 daemon 多路径引擎, FR-5/FR-8, DEC-2) =====
 //
 // A daemon may declare a SET of local working directories (a cwd LIST) it serves.

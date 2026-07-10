@@ -9,6 +9,8 @@ import {
   resolveDaemonCwds,
   resolveWakeConcurrency,
   DEFAULT_WAKE_CONCURRENCY,
+  resolveConsoleConfig,
+  DEFAULT_CONSOLE_PORT,
 } from "../daemon-config.mjs";
 
 describe("resolveSigintTimeoutMs layered precedence", () => {
@@ -191,5 +193,38 @@ describe("resolveWakeConcurrency layered precedence", () => {
 
   it("floors a fractional value", () => {
     expect(resolveWakeConcurrency({ env: { CHORUS_WAKE_CONCURRENCY: "2.9" }, readJson: () => null })).toBe(2);
+  });
+});
+
+describe("resolveConsoleConfig layered precedence", () => {
+  it("defaults to enabled on port 8638", () => {
+    expect(resolveConsoleConfig({ env: {}, readJson: () => null })).toEqual({
+      enabled: true,
+      port: 8638,
+    });
+    expect(DEFAULT_CONSOLE_PORT).toBe(8638);
+  });
+
+  it("CHORUS_DAEMON_CONSOLE off-values disable; anything else enables", () => {
+    for (const off of ["0", "false", "off", "no", " FALSE "]) {
+      expect(resolveConsoleConfig({ env: { CHORUS_DAEMON_CONSOLE: off }, readJson: () => null }).enabled).toBe(false);
+    }
+    expect(resolveConsoleConfig({ env: { CHORUS_DAEMON_CONSOLE: "1" }, readJson: () => null }).enabled).toBe(true);
+  });
+
+  it("daemon.json `console: false` disables, but the env wins over the file", () => {
+    const file = () => ({ console: false });
+    expect(resolveConsoleConfig({ env: {}, readJson: file }).enabled).toBe(false);
+    expect(resolveConsoleConfig({ env: { CHORUS_DAEMON_CONSOLE: "1" }, readJson: file }).enabled).toBe(true);
+  });
+
+  it("port: env > daemon.json consolePort > default; invalid values fall through", () => {
+    expect(
+      resolveConsoleConfig({ env: { CHORUS_DAEMON_CONSOLE_PORT: "9001" }, readJson: () => ({ consolePort: 9002 }) }).port
+    ).toBe(9001);
+    expect(resolveConsoleConfig({ env: {}, readJson: () => ({ consolePort: 9002 }) }).port).toBe(9002);
+    expect(resolveConsoleConfig({ env: { CHORUS_DAEMON_CONSOLE_PORT: "-1" }, readJson: () => ({ consolePort: "zap" }) }).port).toBe(
+      8638
+    );
   });
 });

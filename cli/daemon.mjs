@@ -14,6 +14,8 @@
 
 import { resolveCredentials, loginFilePath } from "./credentials.mjs";
 import { prompt, writeLoginFile } from "./login.mjs";
+import { DAEMON_ACTIONS } from "./client-args.mjs";
+import { createDaemonConsole, createLogRing, readConfiguredCwds } from "./daemon-console.mjs";
 import {
   resolvePermissionMode,
   yoloWarningLine,
@@ -44,6 +46,7 @@ import {
   resolveSigintTimeoutMs,
   resolveDaemonCwds,
   resolveWakeConcurrency,
+  resolveConsoleConfig,
   DEFAULT_WAKE_CONCURRENCY,
 } from "./daemon-config.mjs";
 import {
@@ -62,6 +65,7 @@ import {
   SERVICE_NAME,
 } from "./daemon-service.mjs";
 import { readFileSync, existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -502,6 +506,20 @@ export async function runDaemon(flags = {}, deps = {}) {
   const findCodex = deps.resolveCodexPath ?? resolveCodexPath;
   const findOpencode = deps.resolveOpencodePath ?? resolveOpencodePath;
   const verbose = flags.verbose === true || env.CHORUS_VERBOSE === "1";
+  // Local-console log tee (daemon-local-console): every daemon log line also
+  // lands in a bounded in-memory ring so the 127.0.0.1 console can show a
+  // recent tail in BOTH foreground and detached modes (the logfile only exists
+  // when detached). The tee wraps the SAME injectable log/errLog seams.
+  const ring = createLogRing(300);
+  const logInfo = (m) => {
+    ring.push(m);
+    log(m);
+  };
+  const logErr = (m) => {
+    ring.push(m);
+    errLog(m);
+  };
+  const startedAt = new Date().toISOString();
 
   // Resolve the agent backend (default claude-code). An unknown --agent /
   // CHORUS_AGENT is a hard error — no silent fallback (daemon-agent-selection).
@@ -540,8 +558,9 @@ export async function runDaemon(flags = {}, deps = {}) {
   const pfDeps = { flags, env, isTTY, resolve, validate, writeCreds, askPrompt, log, errLog };
 
   const action = flags.action ?? "run";
+  const argv = deps.argv ?? process.argv;
   if (action !== "run") {
-    return handleLifecycleAction(action, { log, errLog, lifecycle, service, pfDeps });
+    return handleLifecycleAction(action, { log, errLog, lifecycle, service, pfDeps, argv });
   }
 
   // `-d` / --detach: complete any interactive preflight in THIS foreground process
@@ -550,7 +569,7 @@ export async function runDaemon(flags = {}, deps = {}) {
   // preflight prompts. A child run (marker present) falls through to normal startup.
   const isDetachedChild = env[DETACHED_ENV] === "1";
   if (flags.detach && !isDetachedChild) {
-    return startDetached({ log, errLog, lifecycle, pfDeps });
+    return startDetached({ log, errLog, lifecycle, pfDeps, argv });
   }
 
   // SIGINT-escalation window for the interrupt killer (子3) — layered:
@@ -587,7 +606,7 @@ export async function runDaemon(flags = {}, deps = {}) {
   const configExists = existsSync(configPath);
 
   // Boxed startup banner — one screen replacing the scattered [Chorus] lines.
-  log(
+  logInfo(
     formatBanner(
       {
         version,
@@ -608,7 +627,7 @@ export async function runDaemon(flags = {}, deps = {}) {
   // The yolo posture is loud even when the banner scrolls past — keep the one-line
   // ⚠ warning on stderr (it also names --chorus-only as the reclaim switch).
   if (permissionMode === "yolo") {
-    errLog(`[Chorus] ${yoloWarningLine()}`);
+    logErr(`[Chorus] ${yoloWarningLine()}`);
   }
   // A missing backend binary is non-fatal (the daemon still subscribes), but the
   // banner row alone is easy to miss in a systemd journal — emit one loud ⚠ line
@@ -616,20 +635,20 @@ export async function runDaemon(flags = {}, deps = {}) {
   // warning names the SELECTED backend (claude / CHORUS_CLAUDE_PATH or codex /
   // CHORUS_CODEX_PATH).
   if (cliPath === null) {
-    errLog(`[Chorus] ${agentNotFoundWarningLine(agentType)}`);
+    logErr(`[Chorus] ${agentNotFoundWarningLine(agentType)}`);
   }
 
   // Surface the served paths so an operator sees a multi-path daemon at a glance.
   // A single `[undefined]` (the default) prints the process cwd it falls back to.
   const servedPaths = cwds.map((c) => c ?? process.cwd());
   if (servedPaths.length > 1) {
-    log(`[Chorus] serving ${servedPaths.length} paths: ${servedPaths.join(", ")}`);
+    logInfo(`[Chorus] serving ${servedPaths.length} paths: ${servedPaths.join(", ")}`);
   } else {
-    log(`[Chorus] serving path: ${servedPaths[0]}`);
+    logInfo(`[Chorus] serving path: ${servedPaths[0]}`);
   }
 
   const daemon = build(creds, {
-    logger: { info: log, warn: errLog, error: errLog },
+    logger: { info: logInfo, warn: logErr, error: logErr },
     permissionMode,
     agentType,
     verbose,
@@ -638,16 +657,111 @@ export async function runDaemon(flags = {}, deps = {}) {
   });
 
   // Graceful shutdown on signals.
+  /** @type {{ stop(): void } | null} */
+  let localConsole = null;
   const shutdown = () => {
-    log("[Chorus] shutting down daemon...");
+    logInfo("[Chorus] shutting down daemon...");
+    localConsole?.stop();
     Promise.resolve(daemon.stop()).finally(() => process.exit(0));
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  log(`[Chorus] daemon starting — subscribing to ${creds.url}/api/events/notifications`);
+  // ===== Local console (daemon-local-console) =====
+  // A loopback-only status/whitelist page. Machine-local config (the cwd
+  // whitelist) is managed HERE; platform-level concerns stay on the server.
+  const consoleCfg = resolveConsoleConfig({ env });
+  if (consoleCfg.enabled) {
+    // How a console-requested restart/stop must be performed depends on who owns
+    // the process: a detached child or a systemd unit is managed EXTERNALLY (the
+    // `chorus daemon restart|stop` CLI / systemctl own the choreography), while a
+    // plain foreground daemon manages itself (stop in-process, then re-detach).
+    const supervised = (() => {
+      try {
+        const s = service.detectSupervisor();
+        return s.kind === "systemd" && s.installed;
+      } catch {
+        return false;
+      }
+    })();
+    const managedExternally = isDetachedChild || supervised;
+    // Re-invoke this same chorus entry with a lifecycle verb (or -d), carrying
+    // the flags that startDetached's re-exec would otherwise lose: the agent
+    // backend and the permission posture. cwds are deliberately NOT passed —
+    // after a console edit the daemon.json whitelist is the source of truth.
+    const spawnDaemonCli = (verbArgs) => {
+      const args = [process.argv[1], "daemon", ...verbArgs, "--agent", agentType];
+      if (permissionMode === "chorus") args.push("--chorus-only");
+      const child = spawn(process.execPath, args, {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref?.();
+    };
+    const makeConsole = deps.makeConsole ?? createDaemonConsole;
+    localConsole = makeConsole({
+      port: consoleCfg.port,
+      getState: () => ({
+        version,
+        platformUrl: creds.url,
+        agentName: identity.name,
+        agentUuid: identity.uuid,
+        agentType,
+        permissionMode,
+        cliPath,
+        configPath,
+        startedAt,
+        detached: isDetachedChild,
+        wakeConcurrency: daemon.queue?.maxConcurrency ?? null,
+        connections: (daemon.connections ?? []).map((c) => ({
+          cwd: c.cwd ?? process.cwd(),
+          connectionUuid: c.connectionState?.connectionUuid ?? null,
+          skipped: c.outcome?.skipped === true,
+        })),
+        configuredCwds: readConfiguredCwds(),
+        queue: {
+          active: daemon.queue?.activeCount ?? 0,
+          running: daemon.queue?.runningKeys?.() ?? [],
+          pending: daemon.queue?.pendingKeys?.() ?? [],
+        },
+        logTail: ring.lines(),
+      }),
+      onRestart: async () => {
+        if (managedExternally) {
+          // The CLI stops this process via pidfile/systemctl, then starts fresh.
+          spawnDaemonCli(["restart"]);
+          return;
+        }
+        // Foreground: free the server-side connection rows FIRST (a fresh start
+        // while still connected would conflict-skip every path), then re-detach.
+        await daemon.stop();
+        spawnDaemonCli(["-d"]);
+        localConsole?.stop();
+        process.exit(0);
+      },
+      onStop: async () => {
+        if (managedExternally) {
+          spawnDaemonCli(["stop"]);
+          return;
+        }
+        localConsole?.stop();
+        await daemon.stop();
+        process.exit(0);
+      },
+      logger: { info: logInfo, warn: logErr },
+    });
+    const consoleUrl = await localConsole.start();
+    if (consoleUrl) {
+      logInfo(`[Chorus] local console: ${consoleUrl} (loopback only — manage served directories here)`);
+    } else {
+      localConsole = null;
+    }
+  }
+
+  logInfo(`[Chorus] daemon starting — subscribing to ${creds.url}/api/events/notifications`);
   await daemon.start();
-  log("[Chorus] daemon running. Waiting for task dispatches (Ctrl+C to stop).");
+  logInfo("[Chorus] daemon running. Waiting for task dispatches (Ctrl+C to stop).");
 
   // Keep the process alive for the long-lived SSE subscription, but exit non-zero if
   // EVERY declared path turns out to be already served by a live daemon
@@ -668,13 +782,15 @@ export async function runDaemon(flags = {}, deps = {}) {
   ]);
   if (outcome === ALL_CONFLICT) {
     const n = servedPaths.length;
-    errLog(
+    logErr(
       `[Chorus] all ${n} declared ${n === 1 ? "path is" : "paths are"} already served by a live daemon — nothing to do. ` +
         `Stop the other daemon(s) or remove the conflicting path(s), then restart.`
     );
+    localConsole?.stop();
     await daemon.stop();
     return 1;
   }
+  localConsole?.stop();
   return 0;
 }
 
@@ -754,7 +870,7 @@ export async function preflight(ctx) {
  * stop-then-detached-start on the pidfile path.
  * @returns {Promise<number>} exit code
  */
-export async function handleLifecycleAction(action, { log, errLog, lifecycle, service, pfDeps }) {
+export async function handleLifecycleAction(action, { log, errLog, lifecycle, service, pfDeps, argv }) {
   // The supervisor seam is optional (older test bundles inject only lifecycle);
   // a no-op fallback keeps those callers on the pure pidfile path.
   const svc = service ?? { detectSupervisor: () => ({ kind: "none" }) };
@@ -882,7 +998,7 @@ export async function handleLifecycleAction(action, { log, errLog, lifecycle, se
     const r = lifecycle.stopDaemon();
     log(`[Chorus] ${r.message}`);
     // Start a fresh detached instance regardless of whether one was running.
-    return startDetached({ log, errLog, lifecycle, pfDeps, skipPreflight: true });
+    return startDetached({ log, errLog, lifecycle, pfDeps, skipPreflight: true, argv });
   }
   errLog(`[Chorus] unknown daemon action: ${action}`);
   return 1;
@@ -901,6 +1017,7 @@ export async function handleLifecycleAction(action, { log, errLog, lifecycle, se
 export async function startDetached(ctx) {
   const { log, errLog, lifecycle, pfDeps, skipPreflight } = ctx;
   const env = pfDeps.env ?? process.env;
+  const argv = ctx.argv ?? process.argv;
 
   // Refuse to double-start before doing any interactive work.
   const status = lifecycle.isRunning();
@@ -920,7 +1037,17 @@ export async function startDetached(ctx) {
   // Re-exec this same chorus entry without `-d` (so the child runs the daemon),
   // marking it DETACHED so it skips the interactive preflight.
   const nodePath = process.execPath;
-  const scriptArgs = process.argv.slice(1).filter((a) => a !== "-d" && a !== "--detach");
+  const scriptArgs = argv.slice(1).filter((a) => a !== "-d" && a !== "--detach");
+  // Strip a leading lifecycle action verb after `daemon` (same rest[0] rule as
+  // parseDaemonAction). Without this, `chorus daemon restart` re-execs its own
+  // argv VERBATIM: the detached child runs `daemon restart` again, "stops" the
+  // pid recorded in the pidfile — which is ITSELF, just written below — and dies,
+  // leaving a stale pidfile and no daemon (the flaky-restart bug). The child must
+  // always run the plain long-lived daemon (the `run` action).
+  const daemonIdx = scriptArgs.indexOf("daemon");
+  if (daemonIdx !== -1 && DAEMON_ACTIONS.has(scriptArgs[daemonIdx + 1])) {
+    scriptArgs.splice(daemonIdx + 1, 1);
+  }
   const result = lifecycle.startBackground({
     nodePath,
     args: scriptArgs,
