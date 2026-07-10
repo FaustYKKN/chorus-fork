@@ -129,7 +129,13 @@ describe("resolveOpencodePath", () => {
     );
   });
 
-  it("prefers opencode.cmd / opencode.exe on Windows", () => {
+  it("prefers opencode.exe over the .cmd shim on Windows (shell:false cannot spawn .cmd)", () => {
+    const env = { Path: "C:\\bin" };
+    const both = new Set(["C:\\bin\\opencode.exe", "C:\\bin\\opencode.cmd"]);
+    expect(resolveOpencodePath({ env, platform: "win32", isFile: isFile(both) })).toBe("C:\\bin\\opencode.exe");
+  });
+
+  it("still finds the .cmd shim on Windows when no .exe exists", () => {
     const env = { Path: "C:\\bin" };
     const got = resolveOpencodePath({ env, platform: "win32", isFile: isFile(new Set(["C:\\bin\\opencode.cmd"])) });
     expect(got).toBe("C:\\bin\\opencode.cmd");

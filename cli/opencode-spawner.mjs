@@ -125,7 +125,9 @@ export function resolveOpencodePath(deps = {}) {
 
   const isWin = platform === "win32";
   const p = isWin ? pathWin32 : pathPosix;
-  const names = isWin ? ["opencode.cmd", "opencode.exe", "opencode"] : ["opencode"];
+  // .exe FIRST: the spawner uses shell:false, and Node ≥18 refuses to spawn
+  // .cmd/.bat shims without a shell (EINVAL) — a real exe always spawns.
+  const names = isWin ? ["opencode.exe", "opencode.cmd", "opencode"] : ["opencode"];
   const pathVar = env.PATH || env.Path || "";
   const dirs = pathVar.split(p.delimiter).filter(Boolean);
   for (const dir of dirs) {
