@@ -36,6 +36,8 @@ Node 20+ 和 opencode。
 - Windows 上 spawn `.cmd` 会 EINVAL（shell:false + Node≥18），查找 opencode 时 `.exe` 优先（fork 提交 715b650）。
 - 环境变量 `CHORUS_URL` 的优先级高于 daemon.json——安装脚本会把它同步成本次填的地址，
   否则用户早年 setx 的旧地址会静默劫持新配置（现象：`credentials resolved from: env` + `fetch failed`）。
-- opencode 接平台用原生 remote MCP（`{env:CHORUS_API_KEY}` 模板），不装 opencode-chorus 插件——
-  插件首启要联网拉 npm 包，内网机器装不上。
+- opencode 接平台默认用原生 remote MCP（`{env:CHORUS_API_KEY}` 模板），不装 opencode-chorus
+  插件。内网有 npm 镜像仓库，插件其实装得上（bun/npm 指向镜像即可）——选原生是为了
+  依赖面最小：少一个不受控的第三方活动件，且插件的增强（skills/自动 review）暂未用到。
+  以后要用插件，在 opencode.json 加一行 `"plugin": ["opencode-chorus"]` 即可，与原生 MCP 不冲突。
 - 真实模型密钥**不入库**：payload-src 里 apiKey 是占位符 `sk-REPLACE-WITH-REAL-KEY`；内网分发前本地替换并 regen+build，产物 zip 不要回传进仓库。
