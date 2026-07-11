@@ -292,6 +292,7 @@ export function buildDaemon(creds, deps = {}) {
       reportInterrupt,
       advanceTurn,
       verbose,
+      agentType,
       // Graceful-shutdown kill escalation (fix-daemon-exit-orphan-running-turn):
       // interruptAll() reuses the SAME window the interrupt control handler uses.
       sigintTimeoutMs,

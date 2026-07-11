@@ -68,6 +68,10 @@ export class Waker {
     // (Module Contract 1 — one cwd source of truth, no scattered process.cwd()).
     this.cwd = opts.cwd;
     this.hooks = opts.hooks;
+    // The backend this daemon wakes — only used for operator-facing hints (the
+    // takeover line below is a `claude` command; printing it for codex/opencode
+    // wakes is misleading). Behavior is otherwise backend-agnostic.
+    this.agentType = opts.agentType ?? "claude-code";
     this.logger = opts.logger ?? NOOP_LOGGER;
     this.writeMcpConfigFn = opts.writeMcpConfigFn ?? writeMcpConfig;
     this.isNewSessionFn = opts.isNewSessionFn ?? isNewSession;
@@ -372,10 +376,13 @@ export class Waker {
 
       // Lifecycle line 2 — spawn: new vs resume, plus the (otherwise hidden)
       // `claude --resume <id>` takeover hint so an operator can attach to the
-      // session from this daemon's working directory.
+      // session from this daemon's working directory. The hint is a CLAUDE
+      // command — suppress it for other backends (their session ids live in
+      // backend-specific maps, and printing a claude command there misleads).
+      const takeoverHint =
+        sessionId && this.agentType === "claude-code" ? ` — take over with: claude --resume ${sessionId}` : "";
       this.logger.info(
-        `[Chorus] ${isNew ? "spawning new" : "resuming"} session ${sessionId ?? "(none)"}` +
-          (sessionId ? ` — take over with: claude --resume ${sessionId}` : "")
+        `[Chorus] ${isNew ? "spawning new" : "resuming"} session ${sessionId ?? "(none)"}${takeoverHint}`
       );
       if (this.verbose) {
         this.logger.info(`[Chorus]   cwd=${cwd} action=${notification.action} root=${rootIdeaUuid ?? "(none)"}`);
