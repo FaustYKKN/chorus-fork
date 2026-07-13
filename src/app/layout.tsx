@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LocaleProvider } from "@/contexts/locale-context";
+import { ClipboardFallback } from "@/components/ClipboardFallback";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,6 +38,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ClipboardFallback />
         <LocaleProvider>{children}</LocaleProvider>
       </body>
     </html>

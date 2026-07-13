@@ -136,7 +136,7 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
                     <div className="mt-2">
                       <CodeBlock
                         language="powershell"
-                        code={`Invoke-WebRequest ${origin}/ripgrep-win64.zip -OutFile "$env:TEMP\\rg.zip"; Expand-Archive "$env:TEMP\\rg.zip" "$env:TEMP\\rgx" -Force; New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cache\\opencode\\bin" | Out-Null; Copy-Item "$env:TEMP\\rgx\\ripgrep-15.1.0-x86_64-pc-windows-msvc\\rg.exe" "$env:USERPROFILE\\.cache\\opencode\\bin\\rg.exe" -Force`}
+                        code={`Invoke-WebRequest -UseBasicParsing ${origin}/ripgrep-win64.zip -OutFile "$env:TEMP\\rg.zip"; Expand-Archive "$env:TEMP\\rg.zip" "$env:TEMP\\rgx" -Force; New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cache\\opencode\\bin" | Out-Null; Copy-Item "$env:TEMP\\rgx\\ripgrep-15.1.0-x86_64-pc-windows-msvc\\rg.exe" "$env:USERPROFILE\\.cache\\opencode\\bin\\rg.exe" -Force`}
                       />
                     </div>
                   </div>
