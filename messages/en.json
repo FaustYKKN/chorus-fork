@@ -1124,7 +1124,7 @@
         "step1Tip": "Tip: both the plugin and the daemon read these variables. On Windows, setx only affects newly opened terminals; if you switch to a different Chorus URL later, redo this step and reopen the terminal.",
         "step2Title": "Step 2: Install the OpenCode CLI",
         "step2Tip": "The desktop client is only a chat window — platform-dispatched tasks are executed by the CLI in the background, so the CLI is required (skip if already installed).",
-        "step3Title": "Step 3: One command to enable unattended mode",
+        "step3Title": "Step 3: Install ripgrep (required component)",
         "troubleshootingTitle": "Troubleshooting",
         "issueCache": {
           "title": "Plugin not loaded",
@@ -1138,12 +1138,11 @@
           "title": "Unattended mode not responding",
           "fix": "Double-check CHORUS_URL / CHORUS_API_KEY, then re-run the step-3 command (idempotent, safe to repeat); inspect daemon status and logs at the local console http://127.0.0.1:8638."
         },
-        "step3Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
-        "issueRipgrep": {
-          "title": "Skill loading failed (Skill \"chorus\" failed: ripgrep execution failed)",
-          "fix": "OpenCode's skill discovery depends on ripgrep, which it downloads from GitHub by default — this often fails on intranet machines and takes the whole chorus skill down. The step-3 setup command installs it from this platform automatically; you can also run the command below manually (downloads from this platform into OpenCode's tool directory), then restart OpenCode:",
-          "pathTip": "Optional: to make rg a global command available in any terminal, also run the line below, then reopen the terminal. It deliberately avoids the setx pitfalls (merging system PATH into user PATH, silent truncation):"
-        }
+        "step3Tip": "OpenCode's skill feature depends on the ripgrep search tool, which it downloads from GitHub by default — unreachable on the intranet, which breaks the chorus skill. Install it from this platform instead. The command prints the ripgrep version at the end on success; safe to re-run.",
+        "step4Title": "Step 4: One command to enable unattended mode",
+        "step4Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
+        "step3WindowsLabel": "Windows (PowerShell — one command installs it and adds it to your PATH):",
+        "step3UnixLabel": "macOS / Linux:"
       },
       "openClaw": {
         "step1Title": "Step 1: Install plugin",

@@ -85,12 +85,35 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
               <h3 className="mb-2 text-sm font-medium text-foreground">
                 {t("install.opencode.step3Title")}
               </h3>
+              <p className="mb-1 text-xs text-muted-foreground">
+                {t("install.opencode.step3WindowsLabel")}
+              </p>
+              <CodeBlock
+                language="powershell"
+                code={`Invoke-WebRequest -UseBasicParsing ${origin}/ripgrep-win64.zip -OutFile "$env:TEMP\\rg.zip"; Expand-Archive "$env:TEMP\\rg.zip" "$env:TEMP\\rgx" -Force; New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cache\\opencode\\bin" | Out-Null; Copy-Item "$env:TEMP\\rgx\\ripgrep-15.1.0-x86_64-pc-windows-msvc\\rg.exe" "$env:USERPROFILE\\.cache\\opencode\\bin\\rg.exe" -Force; $dir = "$env:USERPROFILE\\.cache\\opencode\\bin"; $userPath = [Environment]::GetEnvironmentVariable("Path", "User"); if ($userPath -notlike "*$dir*") { [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User") }; & "$dir\\rg.exe" --version`}
+              />
+              <p className="mb-1 mt-3 text-xs text-muted-foreground">
+                {t("install.opencode.step3UnixLabel")}
+              </p>
+              <CodeBlock
+                language="bash"
+                code={`mkdir -p ~/.cache/opencode/bin && curl -sL ${origin}/ripgrep-linux-x64.tar.gz | tar -xz --strip-components=1 -C ~/.cache/opencode/bin --wildcards "*/rg" && ~/.cache/opencode/bin/rg --version`}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t("install.opencode.step3Tip")}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-foreground">
+                {t("install.opencode.step4Title")}
+              </h3>
               <CodeBlock
                 language="bash"
                 code={`npx -y ${opencodePluginUrl} setup`}
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                {t("install.opencode.step3Tip")}
+                {t("install.opencode.step4Tip")}
               </p>
             </div>
 
@@ -126,30 +149,7 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
                       {t("install.opencode.issueCheckin.fix")}
                     </p>
                   </div>
-                  <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
-                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                      {t("install.opencode.issueRipgrep.title")}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {t("install.opencode.issueRipgrep.fix")}
-                    </p>
-                    <div className="mt-2">
-                      <CodeBlock
-                        language="powershell"
-                        code={`Invoke-WebRequest -UseBasicParsing ${origin}/ripgrep-win64.zip -OutFile "$env:TEMP\\rg.zip"; Expand-Archive "$env:TEMP\\rg.zip" "$env:TEMP\\rgx" -Force; New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cache\\opencode\\bin" | Out-Null; Copy-Item "$env:TEMP\\rgx\\ripgrep-15.1.0-x86_64-pc-windows-msvc\\rg.exe" "$env:USERPROFILE\\.cache\\opencode\\bin\\rg.exe" -Force`}
-                      />
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {t("install.opencode.issueRipgrep.pathTip")}
-                    </p>
-                    <div className="mt-2">
-                      <CodeBlock
-                        language="powershell"
-                        code={`$dir = "$env:USERPROFILE\\.cache\\opencode\\bin"; $userPath = [Environment]::GetEnvironmentVariable("Path", "User"); if ($userPath -notlike "*$dir*") { [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User") }`}
-                      />
-                    </div>
                   </div>
-                </div>
               </CollapsibleContent>
             </Collapsible>
           </TabsContent>
