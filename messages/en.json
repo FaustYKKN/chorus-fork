@@ -1138,7 +1138,11 @@
           "title": "Unattended mode not responding",
           "fix": "Double-check CHORUS_URL / CHORUS_API_KEY, then re-run the step-3 command (idempotent, safe to repeat); inspect daemon status and logs at the local console http://127.0.0.1:8638."
         },
-        "step3Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status."
+        "step3Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
+        "issueRipgrep": {
+          "title": "Skill loading failed (Skill \"chorus\" failed: ripgrep execution failed)",
+          "fix": "OpenCode's skill discovery depends on ripgrep, which it downloads from GitHub by default — this often fails on intranet machines and takes the whole chorus skill down. The step-3 setup command installs it from this platform automatically; you can also run the command below manually (downloads from this platform into OpenCode's tool directory), then restart OpenCode:"
+        }
       },
       "openClaw": {
         "step1Title": "Step 1: Install plugin",

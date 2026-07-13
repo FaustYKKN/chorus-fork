@@ -126,6 +126,20 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
                       {t("install.opencode.issueCheckin.fix")}
                     </p>
                   </div>
+                  <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      {t("install.opencode.issueRipgrep.title")}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("install.opencode.issueRipgrep.fix")}
+                    </p>
+                    <div className="mt-2">
+                      <CodeBlock
+                        language="powershell"
+                        code={`Invoke-WebRequest ${origin}/ripgrep-win64.zip -OutFile "$env:TEMP\\rg.zip"; Expand-Archive "$env:TEMP\\rg.zip" "$env:TEMP\\rgx" -Force; New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cache\\opencode\\bin" | Out-Null; Copy-Item "$env:TEMP\\rgx\\ripgrep-15.1.0-x86_64-pc-windows-msvc\\rg.exe" "$env:USERPROFILE\\.cache\\opencode\\bin\\rg.exe" -Force`}
+                      />
+                    </div>
+                  </div>
                 </div>
               </CollapsibleContent>
             </Collapsible>
