@@ -27,7 +27,7 @@
 //     mirroring the seam in daemon-lifecycle.mjs (all IO overridable per call).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,9 +63,34 @@ export function launchdPlistPath(io = defaultIO()) {
  * Resolve the absolute path to this CLI's `chorus.mjs` entrypoint (one level up
  * from cli/). Absolute so the generated unit does not depend on the operator's
  * cwd or PATH at boot.
+ *
+ * NOTE: this module-relative derivation is only correct in the source layout
+ * (<root>/cli/daemon-service.mjs → <root>/chorus.mjs). In the single-file
+ * esbuild bundle (~/.chorus/runtime/chorus-daemon.mjs) it points at a file
+ * that does not exist — prefer resolveEntryScriptPath (the running argv[1])
+ * and keep this only as its fallback.
  */
 export function resolveScriptPath() {
   return join(dirname(dirname(fileURLToPath(import.meta.url))), "chorus.mjs");
+}
+
+/**
+ * The script the CURRENT process is actually executing (argv[1], symlinks
+ * resolved — a global `chorus` bin is a symlink to chorus.mjs). Works for both
+ * the source layout and the single-file runtime bundle, so the generated unit's
+ * ExecStart always points at a real entrypoint. Falls back to the
+ * module-relative guess when argv[1] is unavailable.
+ */
+export function resolveEntryScriptPath(argv = process.argv, io = { realpathSync }) {
+  const entry = argv?.[1];
+  if (entry) {
+    try {
+      return io.realpathSync(entry);
+    } catch {
+      /* fall through to the module-relative guess */
+    }
+  }
+  return resolveScriptPath();
 }
 
 /**
@@ -413,10 +438,10 @@ export function uninstallService(io = defaultIO()) {
  * running CLI. Kept here so callers don't reach into process internals.
  * @returns {{ nodePath: string, scriptPath: string, path: string }}
  */
-export function resolveServicePaths(env = process.env, execPath = process.execPath) {
+export function resolveServicePaths(env = process.env, execPath = process.execPath, argv = process.argv) {
   return {
     nodePath: execPath,
-    scriptPath: resolveScriptPath(),
+    scriptPath: resolveEntryScriptPath(argv),
     path: env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
   };
 }

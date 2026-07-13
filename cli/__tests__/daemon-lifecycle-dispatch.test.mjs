@@ -342,6 +342,7 @@ describe("runDaemon — -d detach ordering", () => {
         resolve: () => ({ url: "u", apiKey: "cho_x", source: "env" }),
         validate: async () => { calls.push("preflight"); return { uuid: "a", name: "Bot" }; },
         lifecycle,
+        service: fakeService(),
         log: () => {},
         errLog: () => {},
         env: {},
@@ -362,6 +363,7 @@ describe("runDaemon — -d detach ordering", () => {
         resolve: () => ({ url: "u", apiKey: "cho_x", source: "env" }),
         validate: async () => { throw new Error("bad key"); },
         lifecycle,
+        service: fakeService(),
         log: () => {},
         errLog: (m) => errs.push(m),
         env: {},
@@ -377,11 +379,53 @@ describe("runDaemon — -d detach ordering", () => {
     const errs = [];
     const code = await runDaemon(
       { detach: true },
-      { isTTY: true, lifecycle, prompt: vi.fn(), log: () => {}, errLog: (m) => errs.push(m), env: {} }
+      { isTTY: true, lifecycle, service: fakeService(), prompt: vi.fn(), log: () => {}, errLog: (m) => errs.push(m), env: {} }
     );
     expect(code).toBe(1);
     expect(lifecycle.startBackground).not.toHaveBeenCalled();
     expect(errs.join("")).toMatch(/already running \(pid 88\)/);
+  });
+
+  it("-d refuses when a systemd unit is ACTIVE (supervised daemon writes no pidfile)", async () => {
+    // The supervised daemon runs in the foreground with no pidfile, so the
+    // pidfile check alone would double-start it. The guard must fire BEFORE the
+    // pidfile check and phrase the message as "already running" (the plugin's
+    // setup step treats that phrase as success).
+    const lifecycle = fakeLifecycle();
+    const service = fakeService({
+      detectSupervisor: vi.fn(() => ({ kind: "systemd", installed: true, active: true, unitPath: "/u" })),
+    });
+    const errs = [];
+    const code = await runDaemon(
+      { detach: true },
+      { isTTY: true, lifecycle, service, prompt: vi.fn(), log: () => {}, errLog: (m) => errs.push(m), env: {} }
+    );
+    expect(code).toBe(1);
+    expect(lifecycle.startBackground).not.toHaveBeenCalled();
+    expect(lifecycle.isRunning).not.toHaveBeenCalled();
+    expect(errs.join("")).toMatch(/already running under systemd/);
+  });
+
+  it("-d proceeds when a unit is installed but NOT active", async () => {
+    const lifecycle = fakeLifecycle();
+    const service = fakeService({
+      detectSupervisor: vi.fn(() => ({ kind: "systemd", installed: true, active: false, unitPath: "/u" })),
+    });
+    const code = await runDaemon(
+      { detach: true },
+      {
+        isTTY: true,
+        resolve: () => ({ url: "u", apiKey: "cho_x", source: "env" }),
+        validate: async () => ({ uuid: "a", name: "Bot" }),
+        lifecycle,
+        service,
+        log: () => {},
+        errLog: () => {},
+        env: {},
+      }
+    );
+    expect(code).toBe(0);
+    expect(lifecycle.startBackground).toHaveBeenCalledOnce();
   });
 
   it("a detached child (marker set) skips detach and runs the daemon normally", async () => {
@@ -396,6 +440,7 @@ describe("runDaemon — -d detach ordering", () => {
         validate: async () => ({ uuid: "a", name: "Bot" }),
         build,
         lifecycle,
+        service: fakeService(),
         waitForever: async () => {},
         log: () => {},
         errLog: () => {},

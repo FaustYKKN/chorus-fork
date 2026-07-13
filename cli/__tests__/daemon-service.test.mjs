@@ -2,6 +2,7 @@
 // Unit tests for the supervisor-service module: pure unit/plist rendering, the
 // systemd detection probe, and the install/uninstall IO orchestration (all IO
 // injected — no real systemctl / disk).
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi } from "vitest";
 import {
   SERVICE_NAME,
@@ -286,9 +287,24 @@ describe("systemctlUser / resolveServicePaths", () => {
   });
 
   it("resolveServicePaths reflects the running node + PATH env", () => {
-    const r = resolveServicePaths({ PATH: "/custom/bin" }, "/my/node");
+    const r = resolveServicePaths({ PATH: "/custom/bin" }, "/my/node", ["/my/node"]);
     expect(r.nodePath).toBe("/my/node");
     expect(r.path).toBe("/custom/bin");
+    // No argv[1] → module-relative fallback (source layout).
+    expect(r.scriptPath).toMatch(/chorus\.mjs$/);
+  });
+
+  it("resolveServicePaths derives scriptPath from the RUNNING entry (argv[1]), not module math", () => {
+    // In the single-file runtime bundle (~/.chorus/runtime/chorus-daemon.mjs) the
+    // module-relative guess points at a file that does not exist; the unit's
+    // ExecStart must target what the process is actually executing.
+    const entry = fileURLToPath(new URL("./daemon-service.test.mjs", import.meta.url));
+    const r = resolveServicePaths({}, "/my/node", ["/my/node", entry]);
+    expect(r.scriptPath).toBe(entry);
+  });
+
+  it("resolveServicePaths falls back to the module-relative guess when argv[1] does not exist", () => {
+    const r = resolveServicePaths({}, "/my/node", ["/my/node", "/definitely/not/here.mjs"]);
     expect(r.scriptPath).toMatch(/chorus\.mjs$/);
   });
 });

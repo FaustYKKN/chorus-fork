@@ -570,7 +570,7 @@ export async function runDaemon(flags = {}, deps = {}) {
   // preflight prompts. A child run (marker present) falls through to normal startup.
   const isDetachedChild = env[DETACHED_ENV] === "1";
   if (flags.detach && !isDetachedChild) {
-    return startDetached({ log, errLog, lifecycle, pfDeps, argv });
+    return startDetached({ log, errLog, lifecycle, service, pfDeps, argv });
   }
 
   // SIGINT-escalation window for the interrupt killer (子3) — layered:
@@ -999,7 +999,7 @@ export async function handleLifecycleAction(action, { log, errLog, lifecycle, se
     const r = lifecycle.stopDaemon();
     log(`[Chorus] ${r.message}`);
     // Start a fresh detached instance regardless of whether one was running.
-    return startDetached({ log, errLog, lifecycle, pfDeps, skipPreflight: true, argv });
+    return startDetached({ log, errLog, lifecycle, service: svc, pfDeps, skipPreflight: true, argv });
   }
   errLog(`[Chorus] unknown daemon action: ${action}`);
   return 1;
@@ -1019,6 +1019,18 @@ export async function startDetached(ctx) {
   const { log, errLog, lifecycle, pfDeps, skipPreflight } = ctx;
   const env = pfDeps.env ?? process.env;
   const argv = ctx.argv ?? process.argv;
+
+  // A systemd-supervised daemon runs in the FOREGROUND and writes no pidfile,
+  // so the pidfile check below cannot see it. Without this guard, `-d` after
+  // `daemon install` silently double-starts: the second daemon fights the unit
+  // over the same declared paths on the server.
+  const supervisor = ctx.service?.detectSupervisor?.() ?? { kind: "none" };
+  if (supervisor.kind === "systemd" && supervisor.active) {
+    errLog(
+      `[Chorus] a daemon is already running under systemd (${SERVICE_NAME}.service). Use 'chorus daemon status | restart' to manage it.`,
+    );
+    return 1;
+  }
 
   // Refuse to double-start before doing any interactive work.
   const status = lifecycle.isRunning();
