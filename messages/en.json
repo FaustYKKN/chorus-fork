@@ -1122,10 +1122,9 @@
         "step1WindowsLabel": "Windows (cmd or PowerShell — reopen the terminal afterwards):",
         "step1UnixLabel": "macOS / Linux (add to ~/.bashrc or ~/.zshrc):",
         "step1Tip": "Tip: both the plugin and the daemon read these variables. On Windows, setx only affects newly opened terminals; if you switch to a different Chorus URL later, redo this step and reopen the terminal.",
-        "step2Title": "Step 2: Install the Chorus plugin (one command, config written automatically)",
-        "step2Tip": "The command downloads the plugin package from this platform and merges it into your global opencode.json (replacing any older plugin entry and removing the superseded mcp block; model settings are left untouched). Requires Node.js 18+ and OpenCode.",
-        "step3Title": "Step 3: Enable unattended mode",
-        "step3Desc": "Open OpenCode and tell the agent to “enable unattended mode”. It calls the chorus_daemon tool to log in, set the work directory and serial wake policy, register autostart, and start the daemon. This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
+        "step2Title": "Step 2: Install the OpenCode CLI",
+        "step2Tip": "The desktop client is only a chat window — platform-dispatched tasks are executed by the CLI in the background, so the CLI is required (skip if already installed).",
+        "step3Title": "Step 3: One command to enable unattended mode",
         "troubleshootingTitle": "Troubleshooting",
         "issueCache": {
           "title": "Plugin not loaded",
@@ -1137,8 +1136,9 @@
         },
         "issueCheckin": {
           "title": "Unattended mode not responding",
-          "fix": "Double-check CHORUS_API_KEY for typos or trailing whitespace, then open the local console at http://127.0.0.1:8638 to inspect daemon status and logs."
-        }
+          "fix": "Double-check CHORUS_URL / CHORUS_API_KEY, then re-run the step-3 command (idempotent, safe to repeat); inspect daemon status and logs at the local console http://127.0.0.1:8638."
+        },
+        "step3Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status."
       },
       "openClaw": {
         "step1Title": "Step 1: Install plugin",

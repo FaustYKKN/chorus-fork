@@ -1123,10 +1123,9 @@
         "step1WindowsLabel": "Windows（cmd 或 PowerShell，执行后重新打开终端）：",
         "step1UnixLabel": "macOS / Linux（建议写入 ~/.bashrc 或 ~/.zshrc）：",
         "step1Tip": "提示：插件和守护进程都读取这两个变量。Windows 上 setx 只对新开的终端生效；更换过平台地址时，需要重新执行本步骤并重开终端。",
-        "step2Title": "第 2 步：安装 Chorus 插件（一条命令，自动写配置）",
-        "step2Tip": "该命令从本平台下载插件离线包，并自动把插件写入全局 opencode.json（替换旧的插件写法、移除被取代的 mcp 配置，不改动模型配置）。需要本机已安装 Node.js 18+ 与 OpenCode。",
-        "step3Title": "第 3 步：开启无人值守",
-        "step3Desc": "打开 OpenCode，对 agent 说“开启无人值守”。它会调用 chorus_daemon 工具自动完成：登录平台、设置工作目录与串行唤醒、注册开机自启、启动守护进程。完成后本步骤会自动跳转；日常状态可打开本机控制台 http://127.0.0.1:8638 查看。",
+        "step2Title": "第 2 步：安装 OpenCode CLI",
+        "step2Tip": "桌面客户端只是聊天窗口——平台派发的任务由 CLI 在后台执行，所以 CLI 必须安装（已安装可跳过本步）。",
+        "step3Title": "第 3 步：一条命令开启无人值守",
         "troubleshootingTitle": "故障排除",
         "issueCache": {
           "title": "插件未加载",
@@ -1138,8 +1137,9 @@
         },
         "issueCheckin": {
           "title": "无人值守没有反应",
-          "fix": "核对 CHORUS_API_KEY 是否有错字或多余空格；打开本机控制台 http://127.0.0.1:8638 查看守护进程状态与日志。"
-        }
+          "fix": "核对 CHORUS_URL / CHORUS_API_KEY 后重跑第 3 步命令（幂等，可放心重跑）；再打开本机控制台 http://127.0.0.1:8638 查看守护进程状态与日志。"
+        },
+        "step3Tip": "该命令自动完成全部接入：下载插件、写入全局配置、安装守护进程、登录平台、注册开机自启并立即启动。可重复执行（幂等）。完成后本步骤会自动跳转；日常状态可打开本机控制台 http://127.0.0.1:8638 查看。"
       },
       "openClaw": {
         "step1Title": "第 1 步：安装插件",

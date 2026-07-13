@@ -75,10 +75,7 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
               <h3 className="mb-2 text-sm font-medium text-foreground">
                 {t("install.opencode.step2Title")}
               </h3>
-              <CodeBlock
-                language="bash"
-                code={`npx -y ${opencodePluginUrl} init --spec ${opencodePluginUrl}`}
-              />
+              <CodeBlock language="bash" code="npm install -g opencode-ai" />
               <p className="mt-2 text-xs text-muted-foreground">
                 {t("install.opencode.step2Tip")}
               </p>
@@ -88,8 +85,12 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
               <h3 className="mb-2 text-sm font-medium text-foreground">
                 {t("install.opencode.step3Title")}
               </h3>
-              <p className="text-sm text-muted-foreground">
-                {t("install.opencode.step3Desc")}
+              <CodeBlock
+                language="bash"
+                code={`npx -y ${opencodePluginUrl} setup`}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t("install.opencode.step3Tip")}
               </p>
             </div>
 
