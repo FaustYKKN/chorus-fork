@@ -1120,23 +1120,25 @@
       },
       "opencode": {
         "step1Title": "第 1 步：设置环境变量",
-        "step1Tip": "提示：将这些添加到 ~/.bashrc 或 ~/.zshrc，插件会在 OpenCode 启动时读取这两个变量。",
-        "step2Title": "第 2 步：启用 Chorus 插件",
-        "step2Tip": "安装脚本会幂等地把 \"opencode-chorus\" 加入 ~/.config/opencode/opencode.json 的 \"plugin\" 数组，不会修改你的 shell rc。OpenCode 首次启动时 Bun 会自动安装该插件。",
-        "step3Title": "第 3 步：验证连接",
-        "step3Desc": "打开 OpenCode，告诉 agent \"check in to chorus\"。连接成功后本步骤会自动跳转。",
+        "step1WindowsLabel": "Windows（cmd 或 PowerShell，执行后重新打开终端）：",
+        "step1UnixLabel": "macOS / Linux（建议写入 ~/.bashrc 或 ~/.zshrc）：",
+        "step1Tip": "提示：插件和守护进程都读取这两个变量。Windows 上 setx 只对新开的终端生效；更换过平台地址时，需要重新执行本步骤并重开终端。",
+        "step2Title": "第 2 步：安装 Chorus 插件（一条命令，自动写配置）",
+        "step2Tip": "该命令从本平台下载插件离线包，并自动把插件写入全局 opencode.json（替换旧的插件写法、移除被取代的 mcp 配置，不改动模型配置）。需要本机已安装 Node.js 18+ 与 OpenCode。",
+        "step3Title": "第 3 步：开启无人值守",
+        "step3Desc": "打开 OpenCode，对 agent 说“开启无人值守”。它会调用 chorus_daemon 工具自动完成：登录平台、设置工作目录与串行唤醒、注册开机自启、启动守护进程。完成后本步骤会自动跳转；日常状态可打开本机控制台 http://127.0.0.1:8638 查看。",
         "troubleshootingTitle": "故障排除",
         "issueCache": {
           "title": "插件未加载",
-          "fix": "清空插件缓存：`rm -rf ~/.cache/opencode/packages/opencode-chorus@latest`，然后重启 OpenCode。"
+          "fix": "删除插件缓存后重启 OpenCode：缓存目录在 ~/.cache/opencode/packages（Windows 为 %USERPROFILE%\\.cache\\opencode\\packages），删除其中 opencode-chorus 相关条目即可。"
         },
         "issueEnv": {
           "title": "环境变量未生效",
-          "fix": "确认启动 OpenCode 的 shell 已 export CHORUS_URL 和 CHORUS_API_KEY。如有需要，先 re-source 一下 shell rc。"
+          "fix": "确认启动 OpenCode 的终端能看到 CHORUS_URL 和 CHORUS_API_KEY（Windows 执行 setx 后必须重开终端）。更换过平台地址时，旧的 CHORUS_URL 会覆盖新配置，请重新执行第 1 步。"
         },
         "issueCheckin": {
-          "title": "check-in 无响应",
-          "fix": "核对 CHORUS_API_KEY 是否有错字或多余空格。如果插件仍然加载失败，尝试升级 OpenCode。"
+          "title": "无人值守没有反应",
+          "fix": "核对 CHORUS_API_KEY 是否有错字或多余空格；打开本机控制台 http://127.0.0.1:8638 查看守护进程状态与日志。"
         }
       },
       "openClaw": {

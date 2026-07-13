@@ -1119,23 +1119,25 @@
       },
       "opencode": {
         "step1Title": "Step 1: Set environment variables",
-        "step1Tip": "Tip: Add these to ~/.bashrc or ~/.zshrc so the plugin can read them on OpenCode startup.",
-        "step2Title": "Step 2: Enable the Chorus plugin",
-        "step2Tip": "The installer idempotently adds \"opencode-chorus\" to the \"plugin\" array in ~/.config/opencode/opencode.json. It does not touch your shell rc. OpenCode installs the plugin via Bun on first launch.",
-        "step3Title": "Step 3: Verify connection",
-        "step3Desc": "Open OpenCode and ask the agent to \"check in to chorus\". This step auto-advances when the connection succeeds.",
+        "step1WindowsLabel": "Windows (cmd or PowerShell — reopen the terminal afterwards):",
+        "step1UnixLabel": "macOS / Linux (add to ~/.bashrc or ~/.zshrc):",
+        "step1Tip": "Tip: both the plugin and the daemon read these variables. On Windows, setx only affects newly opened terminals; if you switch to a different Chorus URL later, redo this step and reopen the terminal.",
+        "step2Title": "Step 2: Install the Chorus plugin (one command, config written automatically)",
+        "step2Tip": "The command downloads the plugin package from this platform and merges it into your global opencode.json (replacing any older plugin entry and removing the superseded mcp block; model settings are left untouched). Requires Node.js 18+ and OpenCode.",
+        "step3Title": "Step 3: Enable unattended mode",
+        "step3Desc": "Open OpenCode and tell the agent to “enable unattended mode”. It calls the chorus_daemon tool to log in, set the work directory and serial wake policy, register autostart, and start the daemon. This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
         "troubleshootingTitle": "Troubleshooting",
         "issueCache": {
           "title": "Plugin not loaded",
-          "fix": "Clear the plugin cache with `rm -rf ~/.cache/opencode/packages/opencode-chorus@latest` and restart OpenCode."
+          "fix": "Delete the plugin cache and restart OpenCode: remove the opencode-chorus entries under ~/.cache/opencode/packages (on Windows: %USERPROFILE%\\.cache\\opencode\\packages)."
         },
         "issueEnv": {
           "title": "Environment variables not taking effect",
-          "fix": "Confirm you launched OpenCode from a shell where CHORUS_URL and CHORUS_API_KEY are exported. Re-source your shell rc file if needed."
+          "fix": "Confirm the terminal that launches OpenCode can see CHORUS_URL and CHORUS_API_KEY (on Windows you must reopen the terminal after setx). If you switched platform URLs, a stale CHORUS_URL overrides the new one — redo Step 1."
         },
         "issueCheckin": {
-          "title": "check-in not responding",
-          "fix": "Double-check CHORUS_API_KEY for typos or trailing whitespace. If the plugin still fails to load, try upgrading OpenCode."
+          "title": "Unattended mode not responding",
+          "fix": "Double-check CHORUS_API_KEY for typos or trailing whitespace, then open the local console at http://127.0.0.1:8638 to inspect daemon status and logs."
         }
       },
       "openClaw": {

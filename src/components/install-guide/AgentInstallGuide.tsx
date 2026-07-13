@@ -15,10 +15,14 @@ interface AgentInstallGuideProps {
   apiKey: string | null;
 }
 
+// Offline plugin tarball served from public/ — bump alongside plugin releases.
+const OPENCODE_PLUGIN_TGZ = "opencode-chorus-0.10.0.tgz";
+
 export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
   const t = useTranslations("onboarding");
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const displayKey = apiKey || "<YOUR_API_KEY>";
+  const opencodePluginUrl = `${origin}/${OPENCODE_PLUGIN_TGZ}`;
 
   return (
     <Card className="w-full">
@@ -48,6 +52,16 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
               <h3 className="mb-2 text-sm font-medium text-foreground">
                 {t("install.opencode.step1Title")}
               </h3>
+              <p className="mb-1 text-xs text-muted-foreground">
+                {t("install.opencode.step1WindowsLabel")}
+              </p>
+              <CodeBlock
+                language="bash"
+                code={`setx CHORUS_URL "${origin}"\nsetx CHORUS_API_KEY "${displayKey}"`}
+              />
+              <p className="mb-1 mt-3 text-xs text-muted-foreground">
+                {t("install.opencode.step1UnixLabel")}
+              </p>
               <CodeBlock
                 language="bash"
                 code={`export CHORUS_URL="${origin}"\nexport CHORUS_API_KEY="${displayKey}"`}
@@ -63,7 +77,7 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
               </h3>
               <CodeBlock
                 language="bash"
-                code={`curl -fsSL ${origin}/install-opencode.sh | bash`}
+                code={`npx -y ${opencodePluginUrl} init --spec ${opencodePluginUrl}`}
               />
               <p className="mt-2 text-xs text-muted-foreground">
                 {t("install.opencode.step2Tip")}

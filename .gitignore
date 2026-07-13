@@ -67,6 +67,8 @@ packages/chorus-cdk/lib/*.d.ts
 
 # npm pack output
 *.tgz
+# ...except plugin packages served by the platform as onboarding downloads
+!public/*.tgz
 
 #demo
 dev-story-demo/
