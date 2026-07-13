@@ -1142,7 +1142,8 @@
         "step3Tip": "该命令自动完成全部接入：下载插件、写入全局配置、安装守护进程、登录平台、注册开机自启并立即启动。可重复执行（幂等）。完成后本步骤会自动跳转；日常状态可打开本机控制台 http://127.0.0.1:8638 查看。",
         "issueRipgrep": {
           "title": "技能加载失败（Skill \"chorus\" failed: ripgrep execution failed）",
-          "fix": "OpenCode 的技能搜索依赖 ripgrep，默认从 GitHub 下载，内网机器经常失败，导致 chorus 技能整体不可用。第 3 步的 setup 命令会自动从本平台安装它；也可以手动执行下面的命令（从本平台下载并放进 OpenCode 的工具目录），然后重启 OpenCode："
+          "fix": "OpenCode 的技能搜索依赖 ripgrep，默认从 GitHub 下载，内网机器经常失败，导致 chorus 技能整体不可用。第 3 步的 setup 命令会自动从本平台安装它；也可以手动执行下面的命令（从本平台下载并放进 OpenCode 的工具目录），然后重启 OpenCode：",
+          "pathTip": "可选：想让 rg 成为全局命令（任何终端直接可用），再执行下面这条，然后重开终端。写法刻意避开了 setx 混淆系统/用户 PATH 与超长截断的坑："
         }
       },
       "openClaw": {

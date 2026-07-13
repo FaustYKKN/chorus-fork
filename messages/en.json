@@ -1141,7 +1141,8 @@
         "step3Tip": "The command completes the whole onboarding: downloads the plugin, writes the global config, installs the daemon, logs in, registers start-at-login and starts it now. Safe to re-run (idempotent). This step auto-advances once connected; use the local console at http://127.0.0.1:8638 for day-to-day status.",
         "issueRipgrep": {
           "title": "Skill loading failed (Skill \"chorus\" failed: ripgrep execution failed)",
-          "fix": "OpenCode's skill discovery depends on ripgrep, which it downloads from GitHub by default — this often fails on intranet machines and takes the whole chorus skill down. The step-3 setup command installs it from this platform automatically; you can also run the command below manually (downloads from this platform into OpenCode's tool directory), then restart OpenCode:"
+          "fix": "OpenCode's skill discovery depends on ripgrep, which it downloads from GitHub by default — this often fails on intranet machines and takes the whole chorus skill down. The step-3 setup command installs it from this platform automatically; you can also run the command below manually (downloads from this platform into OpenCode's tool directory), then restart OpenCode:",
+          "pathTip": "Optional: to make rg a global command available in any terminal, also run the line below, then reopen the terminal. It deliberately avoids the setx pitfalls (merging system PATH into user PATH, silent truncation):"
         }
       },
       "openClaw": {
