@@ -6,6 +6,7 @@ import { prisma, TransactionClient } from "@/lib/prisma";
 import { formatAssigneeComplete, formatCreatedBy, batchGetActorNames, batchFormatCreatedBy, batchGetAssigneeInstanceInfo, type AssigneeInstanceInfo } from "@/lib/uuid-resolver";
 import { eventBus } from "@/lib/event-bus";
 import { AlreadyClaimedError, NotClaimedError, isPrismaNotFound } from "@/lib/errors";
+import { assertAgentAssignmentOwnership } from "@/lib/assignment-ownership";
 import { batchCommentCounts } from "@/services/comment.service";
 import * as mentionService from "@/services/mention.service";
 import * as activityService from "@/services/activity.service";
@@ -661,6 +662,19 @@ export async function claimTask({
     // override the assignee fields are written as-is — re-assigning without an
     // override therefore reverts a prior instance pin back to a plain agent.
     const resolved = await resolveTaskAssigneeFields(companyUuid, assigneeType, assigneeUuid, instanceUuid);
+
+    // Ownership fence (fork: agent-ownership-isolation). A task assigned to an
+    // agent — or pinned to an instance — may only be assigned by that agent's
+    // OWNER, blocking cross-owner "drive someone else's machine". The RESOLVED
+    // assignee is checked so an instance pin to a foreign machine is caught even
+    // when assigneeUuid named the caller's own agent. A self-claim carries no
+    // assignedByUuid and falls back to assigneeUuid (itself) → always passes.
+    await assertAgentAssignmentOwnership({
+      companyUuid,
+      resolvedAssigneeType: resolved.assigneeType,
+      resolvedAssigneeUuid: resolved.assigneeUuid,
+      assignerActorUuid: assignedByUuid ?? assigneeUuid,
+    });
 
     const task = await prisma.task.update({
       where: { uuid: taskUuid, status: { in: ["open", "assigned"] } },

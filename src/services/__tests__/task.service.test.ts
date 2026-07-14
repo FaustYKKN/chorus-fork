@@ -56,6 +56,14 @@ const mockPrisma = vi.hoisted(() => {
     agentInstance: {
       findFirst: vi.fn(),
     },
+    // Backing the agent-ownership guard (fork). Defaulted in beforeEach to a
+    // single-owner world so these assignment tests are not fenced.
+    user: {
+      findFirst: vi.fn(),
+    },
+    agent: {
+      findFirst: vi.fn(),
+    },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(txProxy)),
   };
 });
@@ -76,6 +84,11 @@ const mockUuidResolver = vi.hoisted(() => ({
   // place of any agent_instance assignee. Default to an empty map (no instance pins
   // in these fixtures).
   batchGetAssigneeInstanceInfo: vi.fn().mockResolvedValue(new Map()),
+  // Used by the agent-ownership guard: map a (type, uuid) assignee to its agent
+  // uuid. Plain identity for agent/agent_instance is enough for these tests.
+  resolveAssigneeAgentUuid: vi.fn(async (_c: string, type: string, uuid: string) =>
+    type === "agent" || type === "agent_instance" ? uuid : null,
+  ),
 }));
 vi.mock("@/lib/uuid-resolver", () => mockUuidResolver);
 
@@ -111,7 +124,7 @@ import {
   createAcceptanceCriteria,
   replaceAcceptanceCriteria,
 } from "@/services/task.service";
-import { AlreadyClaimedError, NotClaimedError } from "@/lib/errors";
+import { AlreadyClaimedError, NotClaimedError, AssignmentNotOwnedError } from "@/lib/errors";
 
 // ===== Helpers =====
 
@@ -143,6 +156,11 @@ function rawTaskWithRelations(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   resetFixtureCounter();
+  // Agent-ownership guard defaults: single-owner world so assignment tests pass
+  // the fence. Any agent resolves to the same owner; assigner (user branch) is
+  // null so it falls through to the same agent owner.
+  mockPrisma.agent.findFirst.mockResolvedValue({ ownerUuid: "guard-owner" });
+  mockPrisma.user.findFirst.mockResolvedValue(null);
 });
 
 // ---------- listTasks ----------
@@ -598,6 +616,30 @@ describe("claimTask", () => {
 
     const updateData = mockPrisma.task.update.mock.calls[0][0].data;
     expect(updateData.assignedByUuid).toBe("user-123");
+  });
+
+  it("REJECTS a cross-owner assignment and does NOT write (agent-ownership guard)", async () => {
+    // Target agent owned by owner-A; the assigner (an agent) resolves to owner-B.
+    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.agent.findFirst.mockImplementation(({ where }: { where: { uuid: string } }) =>
+      Promise.resolve(
+        where.uuid === "target-agent"
+          ? { ownerUuid: "owner-A" }
+          : { ownerUuid: "owner-B" },
+      ),
+    );
+
+    await expect(
+      claimTask({
+        taskUuid: TASK_UUID,
+        companyUuid: COMPANY_UUID,
+        assigneeType: "agent",
+        assigneeUuid: "target-agent",
+        assignedByUuid: "assigner-agent",
+      }),
+    ).rejects.toBeInstanceOf(AssignmentNotOwnedError);
+
+    expect(mockPrisma.task.update).not.toHaveBeenCalled();
   });
 
   // add-agent-instance-addressing: an optional instance override persists the

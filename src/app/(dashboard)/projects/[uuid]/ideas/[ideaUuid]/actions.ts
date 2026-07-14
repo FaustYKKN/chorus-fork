@@ -6,6 +6,7 @@ import { assignIdea, releaseIdea, getIdeaByUuid } from "@/services/idea.service"
 import { getAssignableAgents, getCompanyUsers } from "@/services/agent.service";
 import { listConnectionsForAgent } from "@/services/daemon-connection.service";
 import { createActivity } from "@/services/activity.service";
+import { AssignmentNotOwnedError } from "@/lib/errors";
 import type { InstanceCandidate } from "@/components/agent-presence/instance-picker";
 import logger from "@/lib/logger";
 
@@ -114,6 +115,10 @@ export async function claimIdeaToAgentAction(
 
     return { success: true };
   } catch (error) {
+    // Cross-owner assignment: the target agent belongs to someone else.
+    if (error instanceof AssignmentNotOwnedError) {
+      return { success: false, error: error.message };
+    }
     logger.error({ err: error }, "Failed to claim idea to agent");
     return { success: false, error: "Failed to claim idea" };
   }

@@ -44,6 +44,14 @@ const { mockPrisma, mockEventBus, mockFormatAssigneeComplete, mockFormatCreatedB
     agentInstance: {
       findFirst: vi.fn(),
     },
+    // Backing the agent-ownership guard (fork). Defaulted in beforeEach to a
+    // single-owner world so these assignment tests are not fenced.
+    user: {
+      findFirst: vi.fn(),
+    },
+    agent: {
+      findFirst: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
   mockEventBus: { emitChange: vi.fn() },
@@ -63,6 +71,10 @@ vi.mock("@/lib/uuid-resolver", () => ({
   formatCreatedBy: mockFormatCreatedBy,
   formatReview: mockFormatReview,
   buildAssigneeMatch: mockBuildAssigneeMatch,
+  // Used by the agent-ownership guard: identity map for agent/agent_instance.
+  resolveAssigneeAgentUuid: vi.fn(async (_c: string, type: string, uuid: string) =>
+    type === "agent" || type === "agent_instance" ? uuid : null,
+  ),
 }));
 vi.mock("@/services/mention.service", () => ({
   parseMentions: mockParseMentions,
@@ -111,6 +123,10 @@ function makeIdeaRecord(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Agent-ownership guard defaults: single-owner world so assignment tests pass
+  // the fence.
+  mockPrisma.agent.findFirst.mockResolvedValue({ ownerUuid: "guard-owner" });
+  mockPrisma.user.findFirst.mockResolvedValue(null);
 });
 
 describe("createIdea", () => {

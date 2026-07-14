@@ -7,6 +7,7 @@ import { formatAssigneeComplete, formatCreatedBy, buildAssigneeMatch, type Assig
 import type { AuthContext } from "@/types/auth";
 import { eventBus } from "@/lib/event-bus";
 import { AlreadyClaimedError, NotClaimedError, isPrismaNotFound } from "@/lib/errors";
+import { assertAgentAssignmentOwnership } from "@/lib/assignment-ownership";
 import { ApiError } from "@/lib/api-handler";
 import * as mentionService from "@/services/mention.service";
 import * as activityService from "@/services/activity.service";
@@ -755,6 +756,18 @@ export async function claimIdea({
   // (validates company ownership and may promote to assigneeType="agent_instance").
   const resolved = await resolveAssigneeFields(companyUuid, assigneeType, assigneeUuid, instanceUuid);
 
+  // Ownership fence (fork: agent-ownership-isolation) — same rule as claimTask.
+  // An idea assigned/pinned to an agent may only be assigned by that agent's
+  // OWNER, so start_development/yolo can never wake someone else's machine off a
+  // cross-owner idea assignment. The RESOLVED assignee is checked (catches a
+  // foreign instance pin); a self-claim falls back to assigneeUuid → passes.
+  await assertAgentAssignmentOwnership({
+    companyUuid,
+    resolvedAssigneeType: resolved.assigneeType,
+    resolvedAssigneeUuid: resolved.assigneeUuid,
+    assignerActorUuid: assignedByUuid ?? assigneeUuid,
+  });
+
   const idea = await prisma.idea.update({
     where: { uuid: ideaUuid },
     data: {
@@ -800,6 +813,18 @@ export async function assignIdea({
   // assignment (agent→agent, instance→instance, or instance→agent revert), since
   // the caller's `assigneeType`/`assigneeUuid` are persisted as-is when no pin.
   const resolved = await resolveAssigneeFields(companyUuid, assigneeType, assigneeUuid, instanceUuid);
+
+  // Ownership fence (fork: agent-ownership-isolation) — same rule as claimTask.
+  // An idea assigned/pinned to an agent may only be assigned by that agent's
+  // OWNER, so start_development/yolo can never wake someone else's machine off a
+  // cross-owner idea assignment. The RESOLVED assignee is checked (catches a
+  // foreign instance pin); a self-claim falls back to assigneeUuid → passes.
+  await assertAgentAssignmentOwnership({
+    companyUuid,
+    resolvedAssigneeType: resolved.assigneeType,
+    resolvedAssigneeUuid: resolved.assigneeUuid,
+    assignerActorUuid: assignedByUuid ?? assigneeUuid,
+  });
 
   const idea = await prisma.idea.update({
     where: { uuid: ideaUuid },

@@ -13,7 +13,7 @@ import * as taskService from "@/services/task.service";
 import * as activityService from "@/services/activity.service";
 import * as elaborationService from "@/services/elaboration.service";
 import { getAgentByUuid } from "@/services/agent.service";
-import { AlreadyClaimedError, NotClaimedError } from "@/lib/errors";
+import { AlreadyClaimedError, NotClaimedError, AssignmentNotOwnedError } from "@/lib/errors";
 import { isAssignmentOwnedByActor } from "@/lib/uuid-resolver";
 import { zArray } from "./schema-utils";
 import { registerPermissionedTool } from "./register-helpers";
@@ -693,6 +693,14 @@ export function registerPmTools(server: McpServer, auth: AgentAuthContext) {
         if (e instanceof AlreadyClaimedError) {
           return {
             content: [{ type: "text", text: "Task is already claimed and cannot be assigned" }],
+            isError: true,
+          };
+        }
+        // Ownership fence: this agent may only assign work to agents owned by the
+        // same person. Assigning to a different owner's machine is refused.
+        if (e instanceof AssignmentNotOwnedError) {
+          return {
+            content: [{ type: "text", text: e.message }],
             isError: true,
           };
         }

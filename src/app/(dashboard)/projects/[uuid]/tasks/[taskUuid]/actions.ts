@@ -6,6 +6,7 @@ import { claimTask, getTaskByUuid, updateTask, releaseTask, createTask, deleteTa
 import { getAssignableAgents, getCompanyUsers } from "@/services/agent.service";
 import { listConnectionsForAgent } from "@/services/daemon-connection.service";
 import { createActivity } from "@/services/activity.service";
+import { AssignmentNotOwnedError } from "@/lib/errors";
 import type { AcceptanceCriteriaItemInput } from "@/lib/acceptance-criteria";
 import type { InstanceCandidate } from "@/components/agent-presence/instance-picker";
 import logger from "@/lib/logger";
@@ -120,6 +121,11 @@ export async function claimTaskToAgentAction(
 
     return { success: true };
   } catch (error) {
+    // Cross-owner assignment: the target agent belongs to someone else. Surface
+    // the guard's own message instead of the generic failure.
+    if (error instanceof AssignmentNotOwnedError) {
+      return { success: false, error: error.message };
+    }
     logger.error({ err: error }, "Failed to claim task to agent");
     return { success: false, error: "Failed to claim task" };
   }

@@ -23,8 +23,14 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   const { page, pageSize, skip, take } = parsePagination(request);
 
+  // Ownership isolation (fork: agent-ownership-isolation). A user sees only
+  // their OWN agents (machines) — never a teammate's. This both hides other
+  // people's machines and keeps the assignment picker (which reads this list)
+  // scoped to what the user is actually allowed to drive. Cross-person work
+  // goes through assigning to the PERSON, not their machine.
   const where = {
     companyUuid: auth.companyUuid,
+    ownerUuid: auth.actorUuid,
   };
 
   const [agents, total] = await Promise.all([

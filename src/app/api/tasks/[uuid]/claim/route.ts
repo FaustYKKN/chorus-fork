@@ -9,7 +9,7 @@ import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission } from "@/lib/auth";
 import { computeEffectivePermissions } from "@/lib/authz/permissions";
 import { getTaskByUuid, claimTask } from "@/services/task.service";
-import { AlreadyClaimedError } from "@/lib/errors";
+import { AlreadyClaimedError, AssignmentNotOwnedError } from "@/lib/errors";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -120,6 +120,10 @@ export const POST = withErrorHandler<{ uuid: string }>(
     } catch (e) {
       if (e instanceof AlreadyClaimedError) {
         return errors.alreadyClaimed();
+      }
+      // Cross-owner assignment: caller does not own the target agent/machine.
+      if (e instanceof AssignmentNotOwnedError) {
+        return errors.forbidden(e.message);
       }
       // A foreign-company / non-existent instance pin is rejected by the
       // service with a plain Error; surface it as a 400 rather than a 500.
