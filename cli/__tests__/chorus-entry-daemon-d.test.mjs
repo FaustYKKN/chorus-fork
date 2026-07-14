@@ -23,6 +23,13 @@ function runEntry(args, { timeoutMs = 15000 } = {}) {
         HOME: "/tmp/chorus-entry-test-home",
         // ensure the plugin-config fallback can't resolve either
         CHORUS_DAEMON_HEADLESS: "",
+        // Isolate from the HOST's systemd --user state: on a machine that
+        // really runs chorus-daemon.service, the supervisor-aware `-d` guard
+        // would answer "already running under systemd" before the credential
+        // error these tests assert. A dead bus makes systemctl fail cleanly →
+        // detectSupervisor reports kind:"none".
+        XDG_RUNTIME_DIR: "/tmp/chorus-entry-test-no-runtime",
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/chorus-entry-test-no-bus",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

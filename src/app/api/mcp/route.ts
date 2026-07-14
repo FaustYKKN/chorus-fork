@@ -52,6 +52,10 @@ export async function POST(request: NextRequest) {
       validation.agent.roles,
       validation.agent.permissions,
     );
+    // Instance identity for pinned-task affinity (optional; sent by the opencode
+    // plugin when the session was woken by the daemon for a specific directory).
+    const instanceHeader = request.headers.get("x-chorus-instance");
+
     const auth: AgentAuthContext = {
       type: "agent",
       companyUuid: validation.agent.companyUuid,
@@ -61,6 +65,7 @@ export async function POST(request: NextRequest) {
       ownerUuid: validation.agent.ownerUuid ?? undefined,
       agentName: validation.agent.name,
       projectUuids,
+      instanceUuid: instanceHeader?.trim() || undefined,
     };
 
     // Stateless: fresh server+transport per request, no session state

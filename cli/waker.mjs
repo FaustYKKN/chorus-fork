@@ -72,6 +72,11 @@ export class Waker {
     // takeover line below is a `claude` command; printing it for codex/opencode
     // wakes is misleading). Behavior is otherwise backend-agnostic.
     this.agentType = opts.agentType ?? "claude-code";
+    // Lazily resolves THIS connection's AgentInstance uuid (learned from the SSE
+    // handshake). Injected into spawned sessions as CHORUS_INSTANCE_UUID so the
+    // server can enforce instance affinity on pinned tasks (a session woken in
+    // directory B must not claim work pinned to directory A).
+    this.getConnectionUuid = opts.getConnectionUuid ?? (() => null);
     this.logger = opts.logger ?? NOOP_LOGGER;
     this.writeMcpConfigFn = opts.writeMcpConfigFn ?? writeMcpConfig;
     this.isNewSessionFn = opts.isNewSessionFn ?? isNewSession;
@@ -412,6 +417,7 @@ export class Waker {
         sessionId,
         isNew,
         cwd,
+        instanceUuid: this.getConnectionUuid() ?? null,
         mcpConfigPath: cfg.path,
         // Capture the live child into the running execution entry the instant it
         // spawns (子3) so the control handler can interrupt it mid-wake. Guarded so

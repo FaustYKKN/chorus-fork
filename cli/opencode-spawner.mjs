@@ -179,7 +179,7 @@ export class OpencodeSpawner {
    *           onChild?: (child: import("node:child_process").ChildProcess) => void }} params
    * @returns {Promise<{ sessionId: string, exitCode: number|null, isNew: boolean }>}
    */
-  async wake({ prompt, sessionId, cwd, onMessage, onChild }) {
+  async wake({ prompt, sessionId, cwd, instanceUuid, onMessage, onChild }) {
     const anchor = typeof sessionId === "string" ? sessionId : "";
 
     const knownSessionId = anchor ? this.getSessionIdFn(anchor) : null;
@@ -214,6 +214,13 @@ export class OpencodeSpawner {
     if (this.creds && this.creds.apiKey) {
       childEnv.CHORUS_API_KEY = this.creds.apiKey;
       if (this.creds.url) childEnv.CHORUS_BASE_URL = this.creds.url;
+    }
+    // Instance identity for pinned-task affinity: the plugin forwards this as an
+    // X-Chorus-Instance header, and the server rejects claims on tasks pinned to
+    // a DIFFERENT instance (fix for "task pinned to directory A executed by the
+    // session woken in directory B").
+    if (typeof instanceUuid === "string" && instanceUuid) {
+      childEnv.CHORUS_INSTANCE_UUID = instanceUuid;
     }
 
     return new Promise((resolve) => {

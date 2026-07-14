@@ -33,12 +33,32 @@ export function registerDeveloperTools(server: McpServer, auth: AgentAuthContext
         return { content: [{ type: "text", text: "Task not found" }], isError: true };
       }
 
+      // Instance affinity: a task pinned to a specific AgentInstance (machine +
+      // directory) may only be claimed by the session actually running there.
+      // Without this guard, a session woken in directory B "claims" a task
+      // pinned to directory A — and the pin-less claim would even REVERT the
+      // pin (claimTask treats it as a plain re-assign).
+      const pinnedInstanceUuid = task.assigneeType === "agent_instance" ? task.assigneeUuid : null;
+      if (pinnedInstanceUuid && auth.instanceUuid !== pinnedInstanceUuid) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "This task is pinned to a specific instance (machine + directory) and your session is not it. Do NOT work on this task here — the pinned instance will handle it.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
       try {
         await taskService.claimTask({
           taskUuid: task.uuid,
           companyUuid: auth.companyUuid,
           assigneeType: "agent",
           assigneeUuid: auth.actorUuid,
+          // Preserve an existing pin through the claim instead of silently reverting it.
+          instanceUuid: pinnedInstanceUuid ?? undefined,
         });
 
         await activityService.createActivity({

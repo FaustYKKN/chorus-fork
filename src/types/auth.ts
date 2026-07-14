@@ -33,6 +33,10 @@ export interface AgentAuthContext extends AuthContext {
   ownerUuid?: string;
   agentName: string;
   projectUuids?: string[]; // Default projects from X-Chorus-Project/X-Chorus-Project-Group headers (optional)
+  // AgentInstance uuid this MCP call originates from (X-Chorus-Instance header,
+  // set by the opencode plugin from the daemon-injected CHORUS_INSTANCE_UUID).
+  // Used to enforce instance affinity on tasks pinned to a specific directory.
+  instanceUuid?: string;
 }
 
 // Super Admin authentication context
