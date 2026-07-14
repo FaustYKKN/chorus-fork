@@ -27,7 +27,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     const { uuid } = await context.params;
 
     const agent = await prisma.agent.findFirst({
-      where: { uuid, companyUuid: auth.companyUuid },
+      // Ownership isolation (fork: agent-ownership-isolation): a user may only
+      // view/modify/delete their OWN agents. A foreign agent resolves to 404
+      // (non-disclosure), same as if it did not exist.
+      where: { uuid, companyUuid: auth.companyUuid, ownerUuid: auth.actorUuid },
       include: {
         apiKeys: {
           where: { revokedAt: null },
@@ -88,7 +91,10 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
     const { uuid } = await context.params;
 
     const agent = await prisma.agent.findFirst({
-      where: { uuid, companyUuid: auth.companyUuid },
+      // Ownership isolation (fork: agent-ownership-isolation): a user may only
+      // view/modify/delete their OWN agents. A foreign agent resolves to 404
+      // (non-disclosure), same as if it did not exist.
+      where: { uuid, companyUuid: auth.companyUuid, ownerUuid: auth.actorUuid },
     });
 
     if (!agent) {
@@ -201,7 +207,10 @@ export const DELETE = withErrorHandler<{ uuid: string }>(
     const { uuid } = await context.params;
 
     const agent = await prisma.agent.findFirst({
-      where: { uuid, companyUuid: auth.companyUuid },
+      // Ownership isolation (fork: agent-ownership-isolation): a user may only
+      // view/modify/delete their OWN agents. A foreign agent resolves to 404
+      // (non-disclosure), same as if it did not exist.
+      where: { uuid, companyUuid: auth.companyUuid, ownerUuid: auth.actorUuid },
       select: { uuid: true },
     });
 

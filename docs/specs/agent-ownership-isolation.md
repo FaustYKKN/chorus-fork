@@ -215,3 +215,30 @@ Idea 的 assignee 写入点（`idea.service` / 相关 action）套用同一 `ass
 - 数据库：无新字段（`ownerUuid` 已存在）；仅存量数据迁移。
 - 代码：`claimTask` + `resolveOwnerUuid`/`assertCanAssignToAgent` 新增；idea 指派、列表 API、presence/mentionables 过滤；错误类型 + 路由/MCP 映射。
 - 兼容：单人使用（所有 Agent 同 owner）行为完全不变——只有跨人指派被拦，正是目标。
+
+---
+
+## 9. Review 补漏：Agent 管理面旁路（2026-07-14 复审发现并修复）
+
+第一轮实现锁死了"指派"这个咽喉，但复审发现 **Agent 本身的管理面仍是公司级敞开**——
+在"Agent = 个人机器"的新语义下，这些全是越权，其中一条是**直接绕过整个隔离的致命后门**：
+
+| # | 路径 | 原漏洞 | 危害 |
+|---|------|--------|------|
+| 1 | `POST /api/api-keys` | 只校验同公司，可给**他人 Agent 签发 API key** | 🔴 致命：拿到他人机器身份 → MCP 自认领任务到其机器 → 绕过指派闸门 |
+| 2 | `PATCH /api/agents/:uuid` | 可改他人 Agent 的 `systemPrompt`/`persona` | 🔴 注入他人 Agent 的"大脑"，下次跑任务执行注入指令 |
+| 3 | `DELETE /api/agents/:uuid` | 可删他人 Agent（级联删 key） | 🟠 DoS/破坏 |
+| 4 | `DELETE /api/api-keys/:uuid` | 可撤销他人 Agent 的 key | 🟠 DoS：让他人机器掉线 |
+| 5 | `GET /api/agents/:uuid` | 可看他人 Agent 详情（含 systemPrompt） | 🟡 信息泄露 |
+| 6 | `GET /api/api-keys` | 列出他人 Agent 的 key 元信息 | 🟡 信息泄露 + 拿 uuid 去删 |
+
+**修复**：统一原则——凡"管理自己 Agent"的 route，Agent 查询一律加 `ownerUuid: auth.actorUuid`，
+查不到即 404（非披露，与"不存在"无法区分）。api-keys 列表先解析调用者自己的 Agent 再按 `agentUuid in [...]`
+过滤；api-keys 撤销先解析 key 的 Agent 再校验归属。super_admin 走 `isUser` 门禁之外，不受影响。
+
+**端到端复验**（小李 攻击 小杨 的机器）：给他人 Agent 签发 key / 篡改 systemPrompt / 删除 / 查看详情
+**全部 404**，小杨 Agent 原样未污染；小李对自己 Agent 的同类操作全部成功；key 列表双向只见自己的。
+新增 `api-keys/__tests__/route.test.ts`（5 例，含致命后门的拒绝断言）。全量 4116 绿。
+
+> 教训：咽喉执法锁住了"数据写入"（指派），但"身份签发"（api-key）和"配置篡改"（agent PATCH）
+> 是并行的旁路——归属隔离必须覆盖一个资源的**全部改动动词**，不只是最显眼的那个。

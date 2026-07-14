@@ -27,10 +27,26 @@ export const DELETE = withErrorHandler<{ uuid: string }>(
 
     const apiKey = await prisma.apiKey.findFirst({
       where: { uuid, companyUuid: auth.companyUuid },
-      select: { uuid: true, revokedAt: true },
+      select: { uuid: true, revokedAt: true, agentUuid: true },
     });
 
     if (!apiKey) {
+      return errors.notFound("API Key");
+    }
+
+    // Ownership isolation (fork: agent-ownership-isolation): only the owner of
+    // the key's agent may revoke it — otherwise a teammate could knock another
+    // person's machine offline (DoS). A key on a foreign agent resolves to 404
+    // (non-disclosure), same as if it did not exist.
+    const ownedAgent = await prisma.agent.findFirst({
+      where: {
+        uuid: apiKey.agentUuid,
+        companyUuid: auth.companyUuid,
+        ownerUuid: auth.actorUuid,
+      },
+      select: { uuid: true },
+    });
+    if (!ownedAgent) {
       return errors.notFound("API Key");
     }
 

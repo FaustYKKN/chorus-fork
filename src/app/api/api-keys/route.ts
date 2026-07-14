@@ -23,9 +23,17 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   const { page, pageSize, skip, take } = parsePagination(request);
 
+  // Ownership isolation (fork: agent-ownership-isolation): a user sees only the
+  // keys of their OWN agents. Without this, keys (and their agents' identity)
+  // for a teammate's machine would be enumerable here.
+  const ownedAgents = await prisma.agent.findMany({
+    where: { companyUuid: auth.companyUuid, ownerUuid: auth.actorUuid },
+    select: { uuid: true },
+  });
   const where = {
     companyUuid: auth.companyUuid,
     revokedAt: null,
+    agentUuid: { in: ownedAgents.map((a) => a.uuid) },
   };
 
   const [apiKeys, total] = await Promise.all([
@@ -87,9 +95,17 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     return errors.validationError({ agentUuid: "Agent UUID is required" });
   }
 
-  // Validate Agent exists (query by UUID)
+  // Validate Agent exists AND belongs to the caller. Ownership isolation (fork:
+  // agent-ownership-isolation) — CRITICAL: minting a key for someone else's
+  // agent would hand the caller that machine's identity, letting them self-claim
+  // tasks onto it via MCP and bypass the whole assignment fence. A foreign agent
+  // resolves to 404 (non-disclosure).
   const agent = await prisma.agent.findFirst({
-    where: { uuid: body.agentUuid, companyUuid: auth.companyUuid },
+    where: {
+      uuid: body.agentUuid,
+      companyUuid: auth.companyUuid,
+      ownerUuid: auth.actorUuid,
+    },
     select: { uuid: true, name: true, roles: true },
   });
 
