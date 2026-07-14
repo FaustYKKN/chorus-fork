@@ -24,16 +24,12 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   const { page, pageSize, skip, take } = parsePagination(request);
 
   // Ownership isolation (fork: agent-ownership-isolation): a user sees only the
-  // keys of their OWN agents. Without this, keys (and their agents' identity)
-  // for a teammate's machine would be enumerable here.
-  const ownedAgents = await prisma.agent.findMany({
-    where: { companyUuid: auth.companyUuid, ownerUuid: auth.actorUuid },
-    select: { uuid: true },
-  });
+  // keys of their OWN agents. Relation filter on the key's agent — same shape as
+  // daemon-connection.service's owner-scoped listing.
   const where = {
     companyUuid: auth.companyUuid,
     revokedAt: null,
-    agentUuid: { in: ownedAgents.map((a) => a.uuid) },
+    agent: { ownerUuid: auth.actorUuid },
   };
 
   const [apiKeys, total] = await Promise.all([

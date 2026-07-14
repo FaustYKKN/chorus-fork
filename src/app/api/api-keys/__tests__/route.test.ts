@@ -90,35 +90,28 @@ describe("POST /api/api-keys ownership", () => {
 });
 
 describe("GET /api/api-keys ownership", () => {
-  it("scopes the key list to the caller's own agents", async () => {
+  it("scopes the key list to the caller's own agents via a relation filter", async () => {
     await GET(req("/api/api-keys"), emptyCtx);
-    // First it resolves the caller's owned agents…
-    expect(mockPrisma.agent.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ companyUuid, ownerUuid: YANG }),
-      }),
-    );
-    // …then filters keys to those agent uuids.
     const listCall = mockPrisma.apiKey.findMany.mock.calls[0][0];
-    expect(listCall.where.agentUuid).toEqual({ in: [YANG_AGENT] });
+    expect(listCall.where.agent).toEqual({ ownerUuid: YANG });
   });
 });
 
 describe("DELETE /api/api-keys/[uuid] ownership", () => {
   it("REFUSES revoking a key on someone else's agent (404, no update)", async () => {
-    // The key exists in-company but points at Li's agent.
-    mockPrisma.apiKey.findFirst.mockResolvedValue({
-      uuid: KEY_UUID, revokedAt: null, agentUuid: LI_AGENT,
-    });
+    // The lookup carries the ownership relation filter, so a foreign agent's key
+    // simply isn't found.
+    mockPrisma.apiKey.findFirst.mockResolvedValue(null);
     const res = await DELETE(req(`/api/api-keys/${KEY_UUID}`, { method: "DELETE" }), ctx(KEY_UUID));
     expect(res.status).toBe(404);
     expect(mockPrisma.apiKey.update).not.toHaveBeenCalled();
+    // Assert the refusal is BY ownership, not merely "key missing".
+    const call = mockPrisma.apiKey.findFirst.mock.calls[0][0];
+    expect(call.where.agent).toEqual({ ownerUuid: YANG });
   });
 
   it("allows revoking a key on the caller's own agent", async () => {
-    mockPrisma.apiKey.findFirst.mockResolvedValue({
-      uuid: KEY_UUID, revokedAt: null, agentUuid: YANG_AGENT,
-    });
+    mockPrisma.apiKey.findFirst.mockResolvedValue({ uuid: KEY_UUID, revokedAt: null });
     mockPrisma.apiKey.update.mockResolvedValue({ uuid: KEY_UUID });
     const res = await DELETE(req(`/api/api-keys/${KEY_UUID}`, { method: "DELETE" }), ctx(KEY_UUID));
     expect(res.status).toBe(200);
