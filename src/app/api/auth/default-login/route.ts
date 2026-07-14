@@ -14,7 +14,10 @@ import {
   UserSessionPayload,
 } from "@/lib/user-session";
 import { getCookieOptions } from "@/lib/cookie-utils";
-import { findOrCreateDefaultUser } from "@/services/user.service";
+import {
+  findOrCreateDefaultUser,
+  authenticateLocalUser,
+} from "@/services/user.service";
 
 interface DefaultLoginRequest {
   email: string;
@@ -22,11 +25,6 @@ interface DefaultLoginRequest {
 }
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  // Check if default auth is enabled
-  if (!isDefaultAuthEnabled()) {
-    return errors.badRequest("Default auth is not enabled");
-  }
-
   const body = await parseBody<DefaultLoginRequest>(request);
 
   // Validate input
@@ -38,21 +36,39 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   }
 
   const email = body.email.trim().toLowerCase();
-  const defaultEmail = getDefaultUserEmail();
 
-  // Verify email matches DEFAULT_USER (case-insensitive)
-  if (email !== defaultEmail) {
-    return errors.unauthorized("Invalid credentials");
+  // 1. Local password accounts (fork feature) — checked before the env
+  //    fallback so a DB account always wins for its own email.
+  const localResult = await authenticateLocalUser(email, body.password);
+  if (localResult.status === "disabled") {
+    return errors.forbidden("This account has been disabled");
   }
 
-  // Verify password
-  const isValid = await verifyDefaultPassword(body.password);
-  if (!isValid) {
-    return errors.unauthorized("Invalid credentials");
-  }
+  let user;
+  if (localResult.status === "ok") {
+    user = localResult.user;
+  } else {
+    // 2. Env-configured default user (upstream behavior).
+    if (!isDefaultAuthEnabled()) {
+      return errors.unauthorized("Invalid credentials");
+    }
 
-  // Auto-provision company + user
-  const user = await findOrCreateDefaultUser(email);
+    const defaultEmail = getDefaultUserEmail();
+
+    // Verify email matches DEFAULT_USER (case-insensitive)
+    if (email !== defaultEmail) {
+      return errors.unauthorized("Invalid credentials");
+    }
+
+    // Verify password
+    const isValid = await verifyDefaultPassword(body.password);
+    if (!isValid) {
+      return errors.unauthorized("Invalid credentials");
+    }
+
+    // Auto-provision company + user
+    user = await findOrCreateDefaultUser(email);
+  }
 
   // Create JWT session
   const sessionPayload: UserSessionPayload = {

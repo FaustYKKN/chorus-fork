@@ -53,7 +53,8 @@
     "genericError": "发生错误，请重试。",
     "unknown": "未知",
     "system": "系统",
-    "confirmDelete": "确定要删除吗？"
+    "confirmDelete": "确定要删除吗？",
+    "close": "关闭"
   },
   "activity": {
     "taskCreated": "{actor} 创建了此任务",
@@ -263,7 +264,45 @@
     "companyNamePlaceholder": "例如：Acme 公司",
     "emailDomainPlaceholder": "例如：acme.com",
     "invalidCredentials": "凭证无效",
-    "createCompanyFailed": "创建公司失败"
+    "createCompanyFailed": "创建公司失败",
+    "usersNav": "用户",
+    "usersTitle": "用户管理",
+    "usersDesc": "查看所有人类用户，新增本地账号、重置密码或禁用账号",
+    "usersLoadFailed": "加载用户列表失败",
+    "noUsers": "暂无用户。",
+    "allCompanies": "全部公司",
+    "createUser": "新增用户",
+    "createUserDesc": "创建本地账号（邮箱 + 密码登录），创建后请把密码告知该用户",
+    "createUserSubmit": "创建",
+    "userCreated": "已创建 {email}，初始密码：{password}（请立即告知用户，此处只显示一次）",
+    "userCreateFailed": "创建用户失败",
+    "userEmailTaken": "该邮箱在此公司已存在",
+    "userUpdateFailed": "更新用户失败",
+    "userName": "姓名",
+    "userCompany": "公司",
+    "userType": "类型",
+    "userStatus": "状态",
+    "userCreatedAt": "创建时间",
+    "localAccount": "本地账号",
+    "oidcAccount": "OIDC",
+    "userActive": "正常",
+    "userDisabled": "已禁用",
+    "resetPassword": "重置密码",
+    "resetPasswordFor": "为 {email} 设置新密码",
+    "resetPasswordDone": "密码已重置。请把新密码告知该用户（此处只显示一次）。",
+    "resetPasswordSubmit": "确认重置",
+    "newPassword": "新密码",
+    "userPasswordHelp": "至少 8 位，可点右侧按钮随机生成",
+    "disableUser": "禁用",
+    "enableUser": "启用",
+    "disableUserConfirm": "确定要禁用 {email} 吗？该用户将无法登录，已登录的会话也会失效。",
+    "registerCodeTitle": "自助注册",
+    "registerCodeOpen": "已开放",
+    "registerCodeClosed": "未开放",
+    "registerCodeDesc": "设置邀请码后，用户可在登录页通过“注册”入口凭邀请码自助创建账号并加入本公司。清空则关闭注册。",
+    "registerCode": "邀请码",
+    "registerCodePlaceholder": "留空表示关闭自助注册",
+    "registerCodeHelp": "把邀请码发给需要注册的同事；点右侧按钮可随机生成"
   },
   "dashboard": {
     "title": "仪表盘",
@@ -779,7 +818,8 @@
       "oidcCompany": "使用 {company} 登录",
       "oidcCompanyFallback": "使用 SSO 登录",
       "back": "换个邮箱"
-    }
+    },
+    "registerLink": "没有账号？注册"
   },
   "projectOverview": {
     "loadingProject": "加载项目中...",
@@ -1664,5 +1704,26 @@
     "status": {
       "unknown": "未知"
     }
+  },
+  "register": {
+    "title": "注册 Chorus 账号",
+    "subtitle": "使用团队邀请码创建账号",
+    "closed": "注册暂未开放。请联系管理员获取账号。",
+    "backToLogin": "返回登录",
+    "inviteCode": "团队邀请码",
+    "inviteCodePlaceholder": "向管理员索取",
+    "inviteCodeHelp": "邀请码决定你加入哪个团队",
+    "name": "姓名",
+    "namePlaceholder": "选填，默认取邮箱前缀",
+    "email": "邮箱",
+    "password": "密码",
+    "passwordHelp": "至少 {min} 位",
+    "confirmPassword": "确认密码",
+    "submit": "注册并登录",
+    "submitting": "注册中...",
+    "invalidCode": "邀请码无效，请确认后重试",
+    "emailTaken": "该邮箱已注册，可直接登录",
+    "passwordTooShort": "密码至少需要 {min} 位",
+    "passwordMismatch": "两次输入的密码不一致"
   }
 }

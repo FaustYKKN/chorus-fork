@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Building2, Shield, LogOut } from "lucide-react";
+import { LayoutDashboard, Building2, Users, Shield, LogOut } from "lucide-react";
 import { clientLogger } from "@/lib/logger-client";
 
 interface AdminUser {
@@ -75,6 +75,11 @@ export default function AdminLayout({
       href: "/admin/companies",
       label: t("admin.companies"),
       icon: Building2,
+    },
+    {
+      href: "/admin/users",
+      label: t("admin.usersNav"),
+      icon: Users,
     },
   ];
 

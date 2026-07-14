@@ -16,6 +16,8 @@ import type { IdentifyRoleOption } from "@/types/admin";
 interface DefaultAuthInfo {
   enabled: boolean;
   superAdminCollision: boolean;
+  // Self-registration open (fork feature: some Company has an invite code set)
+  registrationEnabled?: boolean;
 }
 
 export default function LoginPage() {
@@ -45,12 +47,14 @@ export default function LoginPage() {
       try {
         const response = await fetch("/api/auth/check-default");
         const data = await response.json();
-        if (data.success && data.data?.enabled) {
+        if (data.success && data.data) {
+          // Stored even when the password form is disabled — the register
+          // link (fork feature) may still need to show on the SSO form.
           setDefaultAuth(data.data);
           // Trigger A — the default-auth user is also the super admin. Offer
           // both up front instead of dropping into the default-auth form, so
           // the super admin can still reach /login/admin.
-          if (data.data.superAdminCollision) {
+          if (data.data.enabled && data.data.superAdminCollision) {
             setRoleChoices([{ kind: "super_admin" }, { kind: "default_auth" }]);
           }
         }
@@ -414,7 +418,7 @@ export default function LoginPage() {
                 <div className="h-px flex-1 bg-border" />
               </div>
 
-              <div className="mt-4 flex justify-center">
+              <div className="mt-4 flex flex-col items-center gap-1">
                 <Button
                   variant="link"
                   size="sm"
@@ -426,6 +430,15 @@ export default function LoginPage() {
                 >
                   {t("login.defaultAuth.ssoLink")}
                 </Button>
+                {defaultAuth?.registrationEnabled && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => router.push("/register")}
+                  >
+                    {t("login.registerLink")}
+                  </Button>
+                )}
               </div>
             </>
           ) : (
@@ -473,6 +486,19 @@ export default function LoginPage() {
                     }}
                   >
                     {t("login.backToLogin")}
+                  </Button>
+                </div>
+              )}
+
+              {/* Self-registration entry (fork feature) */}
+              {defaultAuth?.registrationEnabled && (
+                <div className="mt-2 flex justify-center">
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => router.push("/register")}
+                  >
+                    {t("login.registerLink")}
                   </Button>
                 </div>
               )}

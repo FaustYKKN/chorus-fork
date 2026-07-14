@@ -23,6 +23,8 @@ import {
   ArrowLeft,
   Trash2,
   Key,
+  UserPlus,
+  RefreshCw,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/format-date";
 
@@ -33,11 +35,20 @@ interface CompanyDetail {
   oidcIssuer: string | null;
   oidcClientId: string | null;
   oidcEnabled: boolean;
+  registerCode: string | null;
   userCount: number;
   agentCount: number;
   projectCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// Random invite code: 10 unambiguous alphanumerics.
+function generateInviteCode(): string {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = new Uint32Array(10);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
 export default function CompanyDetailPage({
@@ -59,6 +70,7 @@ export default function CompanyDetailPage({
   const [emailDomains, setEmailDomains] = useState("");
   const [oidcIssuer, setOidcIssuer] = useState("");
   const [oidcClientId, setOidcClientId] = useState("");
+  const [registerCode, setRegisterCode] = useState("");
 
   useEffect(() => {
     fetchCompany();
@@ -76,6 +88,7 @@ export default function CompanyDetailPage({
         setEmailDomains(c.emailDomains.join(", "));
         setOidcIssuer(c.oidcIssuer || "");
         setOidcClientId(c.oidcClientId || "");
+        setRegisterCode(c.registerCode || "");
       } else {
         setError(data.error?.message || t("admin.companyNotFound"));
       }
@@ -111,6 +124,7 @@ export default function CompanyDetailPage({
           oidcIssuer: oidcIssuer.trim() || null,
           oidcClientId: oidcClientId.trim() || null,
           oidcEnabled,
+          registerCode: registerCode.trim() || null,
         }),
       });
 
@@ -341,6 +355,52 @@ export default function CompanyDetailPage({
               />
               <p className="text-xs text-muted-foreground">
                 {t("admin.clientIdHelp")}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Self-Registration (fork feature) */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
+                <CardTitle className="text-sm font-medium">
+                  {t("admin.registerCodeTitle")}
+                </CardTitle>
+              </div>
+              {company.registerCode ? (
+                <Badge variant="success">{t("admin.registerCodeOpen")}</Badge>
+              ) : (
+                <Badge variant="warning">{t("admin.registerCodeClosed")}</Badge>
+              )}
+            </div>
+            <CardDescription>{t("admin.registerCodeDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="registerCode">{t("admin.registerCode")}</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="registerCode"
+                  value={registerCode}
+                  onChange={(e) => setRegisterCode(e.target.value)}
+                  placeholder={t("admin.registerCodePlaceholder")}
+                  disabled={saving}
+                  className="font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRegisterCode(generateInviteCode())}
+                  disabled={saving}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("admin.registerCodeHelp")}
               </p>
             </div>
           </CardContent>

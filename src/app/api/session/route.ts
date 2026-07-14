@@ -35,6 +35,17 @@ export async function GET(request: NextRequest) {
     return response;
   }
 
+  // A disabled user may still hold a long-lived JWT — kill the session on the
+  // next probe instead of honoring it (fork feature: local account offboarding).
+  if (user.disabled) {
+    const response = NextResponse.json(
+      { success: false, error: { message: "Account disabled" } },
+      { status: 401 }
+    );
+    clearUserSessionCookies(response);
+    return response;
+  }
+
   return success({
     user: {
       uuid: user.uuid,

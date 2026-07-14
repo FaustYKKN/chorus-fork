@@ -53,7 +53,8 @@
     "genericError": "An error occurred. Please try again.",
     "unknown": "Unknown",
     "system": "System",
-    "confirmDelete": "Are you sure you want to delete?"
+    "confirmDelete": "Are you sure you want to delete?",
+    "close": "Close"
   },
   "activity": {
     "taskCreated": "{actor} created this task",
@@ -263,7 +264,45 @@
     "companyNamePlaceholder": "e.g., Acme Corporation",
     "emailDomainPlaceholder": "e.g., acme.com",
     "invalidCredentials": "Invalid credentials",
-    "createCompanyFailed": "Failed to create company"
+    "createCompanyFailed": "Failed to create company",
+    "usersNav": "Users",
+    "usersTitle": "User Management",
+    "usersDesc": "View all human users, create local accounts, reset passwords, or disable accounts",
+    "usersLoadFailed": "Failed to load users",
+    "noUsers": "No users yet.",
+    "allCompanies": "All companies",
+    "createUser": "Add User",
+    "createUserDesc": "Creates a local account (email + password login). Share the password with the user after creation.",
+    "createUserSubmit": "Create",
+    "userCreated": "Created {email} with initial password: {password} (tell the user now — shown only once)",
+    "userCreateFailed": "Failed to create user",
+    "userEmailTaken": "This email already exists in that company",
+    "userUpdateFailed": "Failed to update user",
+    "userName": "Name",
+    "userCompany": "Company",
+    "userType": "Type",
+    "userStatus": "Status",
+    "userCreatedAt": "Created",
+    "localAccount": "Local",
+    "oidcAccount": "OIDC",
+    "userActive": "Active",
+    "userDisabled": "Disabled",
+    "resetPassword": "Reset Password",
+    "resetPasswordFor": "Set a new password for {email}",
+    "resetPasswordDone": "Password has been reset. Tell the user the new password (shown only once).",
+    "resetPasswordSubmit": "Reset",
+    "newPassword": "New password",
+    "userPasswordHelp": "At least 8 characters; use the button to generate one",
+    "disableUser": "Disable",
+    "enableUser": "Enable",
+    "disableUserConfirm": "Disable {email}? They will no longer be able to log in and existing sessions will be terminated.",
+    "registerCodeTitle": "Self-Registration",
+    "registerCodeOpen": "Open",
+    "registerCodeClosed": "Closed",
+    "registerCodeDesc": "With an invite code set, users can self-register from the login page and join this company. Clear it to close registration.",
+    "registerCode": "Invite code",
+    "registerCodePlaceholder": "Leave empty to disable self-registration",
+    "registerCodeHelp": "Share the code with teammates who need an account; use the button to generate one"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -778,7 +817,8 @@
       "oidcCompany": "Sign in with {company}",
       "oidcCompanyFallback": "Sign in with SSO",
       "back": "Use a different email"
-    }
+    },
+    "registerLink": "No account? Register"
   },
   "projectOverview": {
     "loadingProject": "Loading project...",
@@ -1663,5 +1703,26 @@
     "status": {
       "unknown": "Unknown"
     }
+  },
+  "register": {
+    "title": "Create your Chorus account",
+    "subtitle": "Register with your team invite code",
+    "closed": "Registration is currently closed. Please contact your administrator for an account.",
+    "backToLogin": "Back to login",
+    "inviteCode": "Team invite code",
+    "inviteCodePlaceholder": "Ask your administrator",
+    "inviteCodeHelp": "The invite code decides which team you join",
+    "name": "Name",
+    "namePlaceholder": "Optional, defaults to your email prefix",
+    "email": "Email",
+    "password": "Password",
+    "passwordHelp": "At least {min} characters",
+    "confirmPassword": "Confirm password",
+    "submit": "Register & sign in",
+    "submitting": "Registering...",
+    "invalidCode": "Invalid invite code, please check and try again",
+    "emailTaken": "This email is already registered — just sign in",
+    "passwordTooShort": "Password must be at least {min} characters",
+    "passwordMismatch": "Passwords do not match"
   }
 }

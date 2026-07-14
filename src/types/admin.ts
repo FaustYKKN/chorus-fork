@@ -16,6 +16,7 @@ export interface CompanyListItem {
 export interface CompanyDetail extends CompanyListItem {
   oidcIssuer: string | null;
   oidcClientId: string | null;
+  registerCode: string | null;
   updatedAt: string;
 }
 
@@ -34,6 +35,38 @@ export interface CompanyUpdateInput {
   oidcIssuer?: string | null;
   oidcClientId?: string | null;
   oidcEnabled?: boolean;
+  // Self-registration invite code (fork feature); null closes registration.
+  registerCode?: string | null;
+}
+
+// Admin user list item (fork feature: local account management)
+export interface AdminUserListItem {
+  uuid: string;
+  email: string | null;
+  name: string | null;
+  disabled: boolean;
+  // Whether this user has a local password set (can use the password form).
+  hasPassword: boolean;
+  createdAt: string;
+  company: {
+    uuid: string;
+    name: string;
+  };
+}
+
+// Admin create-user input (always creates a local password account)
+export interface AdminUserCreateInput {
+  companyUuid: string;
+  email: string;
+  password: string;
+  name?: string;
+}
+
+// Admin update-user input — any subset: reset password, toggle disabled, rename
+export interface AdminUserUpdateInput {
+  password?: string;
+  disabled?: boolean;
+  name?: string;
 }
 
 // Candidate workspace entry for oidc_multi_match responses.

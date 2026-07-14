@@ -4,6 +4,8 @@ import { NextRequest } from "next/server";
 const mockIsDefaultAuthEnabled = vi.hoisted(() => vi.fn());
 const mockGetDefaultUserEmail = vi.hoisted(() => vi.fn());
 const mockIsSuperAdminEmail = vi.hoisted(() => vi.fn());
+const mockHasLocalUsers = vi.hoisted(() => vi.fn());
+const mockIsRegistrationOpen = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/default-auth", () => ({
   isDefaultAuthEnabled: mockIsDefaultAuthEnabled,
@@ -11,6 +13,12 @@ vi.mock("@/lib/default-auth", () => ({
 }));
 vi.mock("@/lib/super-admin", () => ({
   isSuperAdminEmail: mockIsSuperAdminEmail,
+}));
+vi.mock("@/services/user.service", () => ({
+  hasLocalUsers: mockHasLocalUsers,
+}));
+vi.mock("@/services/company.service", () => ({
+  isRegistrationOpen: mockIsRegistrationOpen,
 }));
 
 import { GET } from "@/app/api/auth/check-default/route";
@@ -29,6 +37,8 @@ beforeEach(() => {
   mockIsDefaultAuthEnabled.mockReturnValue(false);
   mockGetDefaultUserEmail.mockReturnValue(null);
   mockIsSuperAdminEmail.mockReturnValue(false);
+  mockHasLocalUsers.mockResolvedValue(false);
+  mockIsRegistrationOpen.mockResolvedValue(false);
 });
 
 describe("GET /api/auth/check-default", () => {
@@ -40,7 +50,7 @@ describe("GET /api/auth/check-default", () => {
 
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({ enabled: false, superAdminCollision: false });
+    expect(json.data).toEqual({ enabled: false, superAdminCollision: false, registrationEnabled: false });
     // When disabled we never consult the super-admin predicate for a collision.
     expect(mockIsSuperAdminEmail).not.toHaveBeenCalled();
   });
@@ -55,7 +65,7 @@ describe("GET /api/auth/check-default", () => {
 
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({ enabled: true, superAdminCollision: true });
+    expect(json.data).toEqual({ enabled: true, superAdminCollision: true, registrationEnabled: false });
     // The collision check delegates to the unchanged super-admin predicate,
     // and the email is never echoed back in the payload.
     expect(mockIsSuperAdminEmail).toHaveBeenCalledWith("root@example.com");
@@ -72,7 +82,7 @@ describe("GET /api/auth/check-default", () => {
 
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({ enabled: true, superAdminCollision: false });
+    expect(json.data).toEqual({ enabled: true, superAdminCollision: false, registrationEnabled: false });
   });
 
   it("reports collision=false when default auth is enabled but the default user email is null", async () => {
@@ -84,8 +94,35 @@ describe("GET /api/auth/check-default", () => {
 
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({ enabled: true, superAdminCollision: false });
+    expect(json.data).toEqual({ enabled: true, superAdminCollision: false, registrationEnabled: false });
     // A null default email short-circuits before the super-admin predicate.
     expect(mockIsSuperAdminEmail).not.toHaveBeenCalled();
+  });
+
+  it("reports enabled=true from local accounts alone (fork), with NO collision path", async () => {
+    mockIsDefaultAuthEnabled.mockReturnValue(false);
+    mockHasLocalUsers.mockResolvedValue(true);
+
+    const res = await GET(makeRequest(), emptyCtx);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data).toEqual({
+      enabled: true,
+      superAdminCollision: false,
+      registrationEnabled: false,
+    });
+    // The collision concept belongs to env default-auth only.
+    expect(mockIsSuperAdminEmail).not.toHaveBeenCalled();
+  });
+
+  it("reports registrationEnabled=true when a company has an invite code (fork)", async () => {
+    mockIsRegistrationOpen.mockResolvedValue(true);
+
+    const res = await GET(makeRequest(), emptyCtx);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.registrationEnabled).toBe(true);
   });
 });

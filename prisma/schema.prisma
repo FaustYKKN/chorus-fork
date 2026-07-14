@@ -21,6 +21,9 @@ model Company {
   oidcIssuer   String? // OIDC Provider URL
   oidcClientId String? // Client ID
   oidcEnabled  Boolean  @default(false)
+  // Self-registration invite code (fork feature: local password accounts).
+  // null = self-registration closed for this Company.
+  registerCode String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -39,17 +42,20 @@ model Company {
   agentInstances    AgentInstance[]
 }
 
-// User (human, OIDC login)
+// User (human; OIDC login or local password account)
 model User {
-  id          Int      @id @default(autoincrement())
-  uuid        String   @unique @default(uuid())
-  companyUuid String
-  company     Company  @relation(fields: [companyUuid], references: [uuid])
-  oidcSub     String // OIDC subject
-  email       String?
-  name        String?
-  avatarUrl   String?
-  createdAt   DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  uuid         String   @unique @default(uuid())
+  companyUuid  String
+  company      Company  @relation(fields: [companyUuid], references: [uuid])
+  oidcSub      String // OIDC subject ("local_<email>" for local password accounts)
+  email        String?
+  name         String?
+  avatarUrl    String?
+  // Local password account (fork feature). null = OIDC/default-auth only.
+  passwordHash String?
+  disabled     Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   ownedAgents Agent[]
 

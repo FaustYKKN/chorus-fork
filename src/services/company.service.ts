@@ -51,6 +51,7 @@ export async function getCompanyByUuid(uuid: string) {
       oidcIssuer: true,
       oidcClientId: true,
       oidcEnabled: true,
+      registerCode: true,
       createdAt: true,
       updatedAt: true,
       _count: {
@@ -87,6 +88,28 @@ export async function getCompanyByEmailDomain(email: string) {
       oidcClientId: true,
     },
   });
+}
+
+// ===== Find Company by self-registration invite code =====
+// A Company with a non-null registerCode accepts local-account self-registration.
+export async function getCompanyByRegisterCode(code: string) {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+  return prisma.company.findFirst({
+    where: { registerCode: trimmed },
+    select: {
+      uuid: true,
+      name: true,
+    },
+  });
+}
+
+// ===== Whether ANY Company currently accepts self-registration =====
+export async function isRegistrationOpen(): Promise<boolean> {
+  const count = await prisma.company.count({
+    where: { registerCode: { not: null } },
+  });
+  return count > 0;
 }
 
 // ===== Create =====
@@ -136,6 +159,7 @@ export async function updateCompany(id: number, data: CompanyUpdateInput) {
       oidcIssuer: true,
       oidcClientId: true,
       oidcEnabled: true,
+      registerCode: true,
       createdAt: true,
       updatedAt: true,
     },

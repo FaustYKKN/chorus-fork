@@ -28,6 +28,7 @@ export const GET = withErrorHandler<{ uuid: string }>(
       oidcIssuer: company.oidcIssuer,
       oidcClientId: company.oidcClientId,
       oidcEnabled: company.oidcEnabled,
+      registerCode: company.registerCode,
       userCount: company._count.users,
       agentCount: company._count.agents,
       projectCount: company._count.projects,
@@ -65,6 +66,10 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
       updateData.oidcClientId = body.oidcClientId;
     if (body.oidcEnabled !== undefined)
       updateData.oidcEnabled = body.oidcEnabled;
+    // Self-registration invite code (fork feature). Empty string clears it
+    // (registration closed for this company).
+    if (body.registerCode !== undefined)
+      updateData.registerCode = body.registerCode?.trim() || null;
 
     const updated = await companyService.updateCompany(company.id, updateData);
 
@@ -75,6 +80,7 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
       oidcIssuer: updated.oidcIssuer,
       oidcClientId: updated.oidcClientId,
       oidcEnabled: updated.oidcEnabled,
+      registerCode: updated.registerCode,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     });
