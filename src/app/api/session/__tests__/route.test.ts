@@ -61,6 +61,27 @@ describe("GET /api/session", () => {
     expect(res.cookies.get("user_session")?.value).toBe("");
   });
 
+  it("401s and clears session cookies for a DISABLED user (offboarding kills the live JWT)", async () => {
+    // Fork feature: a long-lived user_session JWT is honored only until the next
+    // probe — a disabled local account is cut off there, not left to run out its
+    // 365-day token.
+    getAuthContext.mockResolvedValue({ type: "user", companyUuid: "c1", actorUuid: "u1" });
+    getUserByUuid.mockResolvedValue({
+      uuid: "u1",
+      email: "a@b.c",
+      name: "A",
+      disabled: true,
+      company: { uuid: "c1", name: "Co" },
+    });
+
+    const res = await GET(makeRequest());
+    const json = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(json.error.message).toMatch(/disabled/i);
+    expect(res.cookies.get("user_session")?.value).toBe("");
+  });
+
   it("the probe path is INSIDE the middleware matcher (the reason this route exists)", () => {
     // Mirror of src/middleware.ts config.matcher.
     const MATCHER = "^/((?!_next|login|api/auth|skill|favicon\\.ico|.*\\.).*)$";

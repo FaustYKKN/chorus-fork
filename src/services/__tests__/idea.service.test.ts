@@ -391,6 +391,28 @@ describe("assignIdea", () => {
     expect(mockEventBus.emitChange).toHaveBeenCalled();
   });
 
+  it("REJECTS a cross-owner agent assignment and does NOT write (ownership guard wired into assignIdea)", async () => {
+    const { AssignmentNotOwnedError } = await import("@/lib/errors");
+    mockPrisma.idea.findFirst.mockResolvedValue(makeIdeaRecord({ status: "open", assigneeUuid: null }));
+    // Target agent owned by owner-A; the assigner (an agent) resolves to owner-B.
+    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.agent.findFirst.mockImplementation(({ where }: { where: { uuid: string } }) =>
+      Promise.resolve(where.uuid === "target-agent" ? { ownerUuid: "owner-A" } : { ownerUuid: "owner-B" }),
+    );
+
+    await expect(
+      assignIdea({
+        ideaUuid: IDEA_UUID,
+        companyUuid: COMPANY_UUID,
+        assigneeType: "agent",
+        assigneeUuid: "target-agent",
+        assignedByUuid: "assigner-agent",
+      }),
+    ).rejects.toBeInstanceOf(AssignmentNotOwnedError);
+
+    expect(mockPrisma.idea.update).not.toHaveBeenCalled();
+  });
+
   it("should keep current status when reassigning non-open idea", async () => {
     const existing = makeIdeaRecord({
       status: "elaborating",
