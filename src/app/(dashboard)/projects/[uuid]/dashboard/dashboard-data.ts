@@ -3,6 +3,7 @@ import { getServerAuthContext } from "@/lib/auth-server";
 import { getProject, getProjectStats } from "@/services/project.service";
 import { getTrackerGroups } from "@/services/idea.service";
 import { listActivitiesWithActorNames } from "@/services/activity.service";
+import { getTaskAttentionSummary } from "@/services/task.service";
 
 export async function getDashboardData(projectUuid: string) {
   const auth = await getServerAuthContext();
@@ -17,6 +18,7 @@ export async function getDashboardData(projectUuid: string) {
 
   const trackerData = await getTrackerGroups(auth.companyUuid, projectUuid);
   const stats = await getProjectStats(auth.companyUuid, projectUuid);
+  const attention = await getTaskAttentionSummary(auth.companyUuid, projectUuid);
   const { activities } = await listActivitiesWithActorNames({
     companyUuid: auth.companyUuid,
     projectUuid,
@@ -28,6 +30,7 @@ export async function getDashboardData(projectUuid: string) {
     project,
     trackerData,
     stats,
+    attention,
     activities,
     currentUserUuid: auth.actorUuid,
   };

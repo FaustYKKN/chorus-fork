@@ -478,7 +478,15 @@ export class Waker {
         if (cleanExit) {
           await this.#advanceTurn(sessionId, "ended", entity);
         } else {
-          const reason = wasInterrupting ? "user" : this.shuttingDown ? "shutdown" : "crash";
+          // R5: a monitor-killed wake (idle/over-budget) reports `timed_out` so the
+          // server flags the task "timed_out" (distinct from an organic "crash").
+          const reason = wasInterrupting
+            ? "user"
+            : this.shuttingDown
+              ? "shutdown"
+              : result && result.timedOut
+                ? "timed_out"
+                : "crash";
           await this.#advanceTurn(sessionId, "interrupted", entity, reason);
         }
       }

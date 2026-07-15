@@ -70,10 +70,10 @@ export type TurnStatus = (typeof TURN_STATUSES)[number];
 // daemon-reported outcomes; `offline` is reserved to SERVER-side reconcile of a turn
 // whose origin connection went stale — the turn-advance route rejects a daemon
 // claiming it (the daemon being alive to report contradicts the verdict).
-export const TURN_INTERRUPT_REASONS = ["user", "crash", "shutdown", "offline"] as const;
+export const TURN_INTERRUPT_REASONS = ["user", "crash", "shutdown", "offline", "timed_out"] as const;
 export type TurnInterruptReason = (typeof TURN_INTERRUPT_REASONS)[number];
 // The subset a daemon may self-report over `/api/daemon/turn-advance`.
-export const DAEMON_REPORTABLE_INTERRUPT_REASONS = ["user", "crash", "shutdown"] as const;
+export const DAEMON_REPORTABLE_INTERRUPT_REASONS = ["user", "crash", "shutdown", "timed_out"] as const;
 
 // The two session lifecycle states. A session is `active` until explicitly ended;
 // it stays readable (its turns/transcript) regardless of state — `ended` is history,

@@ -1724,5 +1724,14 @@
     "emailTaken": "This email is already registered — just sign in",
     "passwordTooShort": "Password must be at least {min} characters",
     "passwordMismatch": "Passwords do not match"
+  },
+  "batchSummary": {
+    "title": "This batch",
+    "inProgress": "{n} in progress",
+    "toVerify": "{n} to verify",
+    "crashed": "{n} crashed",
+    "timedOut": "{n} timed out",
+    "unsubmitted": "{n} unsubmitted",
+    "allClear": "all clear"
   }
 }

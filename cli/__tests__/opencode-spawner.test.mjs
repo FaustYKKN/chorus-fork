@@ -320,3 +320,52 @@ describe("OpencodeSpawner.wake — spawn orchestration", () => {
     expect(result.exitCode).toBe(0);
   });
 });
+
+describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
+  const silent = { info() {}, warn() {}, error() {} };
+
+  it("kills a SILENT wake after idleTimeoutMs and reports timedOut", async () => {
+    const child = makeFakeChild();
+    child.kill = () => child.emit("close", null); // SIGKILL → close(null)
+    const spawner = new OpencodeSpawner({
+      opencodePath: "/usr/bin/opencode",
+      spawnImpl: () => child,
+      platform: "linux",
+      logger: silent,
+      idleTimeoutMs: 50, // silent >50ms → killed
+      maxMs: 0,
+      checkIntervalMs: 10,
+    });
+    const result = await spawner.wake({ prompt: "hi", sessionId: "s1", isNew: true, cwd: "/tmp" });
+    expect(result.timedOut).toBe(true);
+  });
+
+  it("does NOT kill a wake that keeps producing output; clean exit → timedOut false", async () => {
+    const child = makeFakeChild();
+    let killed = false;
+    child.kill = () => {
+      killed = true;
+      child.emit("close", null);
+    };
+    const spawner = new OpencodeSpawner({
+      opencodePath: "/usr/bin/opencode",
+      spawnImpl: () => child,
+      platform: "linux",
+      logger: silent,
+      idleTimeoutMs: 100,
+      maxMs: 0,
+      checkIntervalMs: 20,
+    });
+    const wakeP = spawner.wake({ prompt: "hi", sessionId: "s1", isNew: true, cwd: "/tmp" });
+    // Output every 30ms (< 100ms idle) keeps it alive, then a clean close.
+    const beat = setInterval(() => child.stdout.emit("data", '{"sessionID":"ses_x"}\n'), 30);
+    setTimeout(() => {
+      clearInterval(beat);
+      child.emit("close", 0);
+    }, 250);
+    const result = await wakeP;
+    expect(killed).toBe(false);
+    expect(result.timedOut).toBe(false);
+    expect(result.exitCode).toBe(0);
+  });
+});

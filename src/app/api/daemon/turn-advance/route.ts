@@ -29,6 +29,10 @@ import {
   DAEMON_REPORTABLE_INTERRUPT_REASONS,
   advanceTurnForWake,
 } from "@/services/daemon-session.service";
+import { reconcileTaskStatusFromWake } from "@/services/task.service";
+import { sendSubmitNudge } from "@/services/daemon-instruction.service";
+import { dispatchControl } from "@/services/daemon-control.service";
+import logger from "@/lib/logger";
 
 // Body: the connection reporting the advance, the session business key, the target
 // status, and the OPTIONAL wake-triggering entity (for the weak executionUuid link).
@@ -120,6 +124,42 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     }
     // 404 (not 403) — non-disclosure, indistinguishable from a non-existent session/turn.
     return errors.notFound("Turn");
+  }
+
+  // Unattended-batch task lifecycle (SPEC): drive the TASK status off this turn
+  // signal — R2 (running → in_progress) now; R3/R4 in later phases. Best-effort:
+  // the turn already advanced, so a task-reconcile failure is logged, not fatal.
+  try {
+    const outcome = await reconcileTaskStatusFromWake({
+      companyUuid: auth.companyUuid,
+      status,
+      entityType: entityType ?? null,
+      entityUuid: entityUuid ?? null,
+      interruptedReason: interruptedReason ?? null,
+    });
+    // R3: the task finished-without-submit for the first time → send ONE focused
+    // "submit or explain" nudge on this same session (the daemon re-wakes for it).
+    if (outcome && "nudge" in outcome && entityUuid) {
+      await sendSubmitNudge({
+        companyUuid: auth.companyUuid,
+        agentUuid: auth.actorUuid,
+        sessionUuid: result.turn.sessionUuid,
+        taskUuid: entityUuid,
+      });
+    } else if (outcome && "retry" in outcome && entityUuid) {
+      // R4/R7: a crash/timeout under the retry budget → re-dispatch the task's
+      // wake on this same connection (the daemon re-runs it with a crash-continue).
+      dispatchControl({
+        companyUuid: auth.companyUuid,
+        targetConnectionUuid: connectionUuid,
+        command: "resume",
+        entityType: "task",
+        entityUuid,
+        resumeReason: "crash",
+      });
+    }
+  } catch (err) {
+    logger.warn({ err, entityType, entityUuid, status }, "[turn-advance] task-status reconcile failed");
   }
 
   return success({ turn: result.turn });

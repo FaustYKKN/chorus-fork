@@ -412,6 +412,49 @@ export async function sendInstruction(
   return { turn };
 }
 
+/**
+ * R3 (SPEC docs/specs/unattended-batch-execution.md) — SYSTEM-initiated
+ * "you finished but didn't submit" nudge. Unlike sendInstruction (owner-scoped,
+ * user-initiated), the SERVER fires this on a turn-ended report whose task is
+ * still in_progress. It creates ONE focused instruction turn on the agent's OWN
+ * session (resolved by the turn's sessionUuid) and pings deliver_turn so the
+ * daemon re-wakes with a SHORT single-purpose prompt — which succeeds where the
+ * original ask, buried under a skill + a long task, was forgotten. Best-effort:
+ * returns {sent:false} when the session/origin connection can't be resolved (the
+ * durable attention flag from the caller's escalation path is the backstop).
+ */
+export async function sendSubmitNudge(params: {
+  companyUuid: string;
+  agentUuid: string;
+  sessionUuid: string;
+  taskUuid: string;
+  taskTitle?: string | null;
+}): Promise<{ sent: boolean }> {
+  const { companyUuid, agentUuid, sessionUuid, taskUuid, taskTitle } = params;
+  const session = await prisma.daemonSession.findFirst({
+    where: { uuid: sessionUuid, companyUuid, agentUuid },
+    select: { uuid: true, sessionId: true, directIdeaUuid: true, originConnectionUuid: true },
+  });
+  if (!session || !session.originConnectionUuid) return { sent: false };
+
+  const label = taskTitle ? `「${taskTitle}」(${taskUuid})` : taskUuid;
+  const instructionText =
+    `你上一段运行结束了，但任务 ${label} 还停在 in_progress、没有提交验证。\n` +
+    `如果活已经做完：现在就调用 chorus_submit_for_verify 提交人工验证。\n` +
+    `如果还没做完或卡住了：调用 chorus_report_work 说明进度/卡点，不要静默结束。`;
+
+  const turn = await createInstructionTurn({
+    auth: { type: "agent", companyUuid, actorUuid: agentUuid },
+    agentUuid,
+    sessionUuid: session.uuid,
+    sessionId: session.sessionId,
+    directIdeaUuid: session.directIdeaUuid,
+    instructionText,
+  });
+  deliverTurnPing({ companyUuid, originConnectionUuid: session.originConnectionUuid, turnUuid: turn.uuid });
+  return { sent: true };
+}
+
 // ===== Ad-hoc create-and-send =====
 
 /**

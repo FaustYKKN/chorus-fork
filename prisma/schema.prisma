@@ -246,6 +246,22 @@ model Task {
   description             String?
   // Status and assignment (ARCHITECTURE.md §7.2)
   status                  String                @default("open") // open | assigned | in_progress | to_verify | done | closed
+  // Unattended-batch (fork): non-null = this task's autonomous run needs a
+  // human's attention (crashed / timed-out / finished-but-unsubmitted after
+  // nudges). A flag OVER the normal status — status itself stays resumable.
+  // Cleared when the wake next starts running or the task is submitted.
+  attentionReason         String? // null | "crashed" | "timed_out" | "unsubmitted"
+  // Unattended-batch (fork): how many "you finished but didn't submit" nudges
+  // have been sent for the CURRENT in_progress stint (R3). Bounds auto-nudging
+  // to K=1: 0 → nudge once; ≥1 → escalate to attentionReason="unsubmitted". Reset
+  // to 0 when a fresh assignment starts (assigned→in_progress). NOT cleared by a
+  // nudge re-wake's running report, so the count survives to enable escalation.
+  submitNudges            Int                   @default(0)
+  // Unattended-batch (fork): how many times this in_progress stint has been
+  // auto-retried after a crash / timeout (R4/R7). Bounds retries to K=1 before
+  // giving up and flagging attentionReason. Reset to 0 on a fresh assignment;
+  // NOT reset by a retry re-wake's running report, so the count survives.
+  wakeRetries             Int                   @default(0)
   priority                String                @default("medium") // low | medium | high
   storyPoints             Float? // Effort estimate (unit: Agent hours)
   acceptanceCriteria      String? // Acceptance criteria (Markdown)

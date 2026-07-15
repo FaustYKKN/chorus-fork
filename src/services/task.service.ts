@@ -150,6 +150,192 @@ export function isValidTaskStatusTransition(from: string, to: string): boolean {
   return allowed.includes(to);
 }
 
+// ===== Unattended-batch task lifecycle, driven by the daemon's turn signal =====
+// (SPEC docs/specs/unattended-batch-execution.md). The daemon reports a wake's
+// turn lifecycle (running / ended / interrupted) with the entity it woke for.
+// We hang the TASK status machine off that signal — structurally, never relying
+// on the agent remembering to call chorus_report_work / chorus_submit_for_verify.
+// Best-effort + non-throwing at the boundary: the turn already advanced; a task
+// reconcile hiccup must not fail the daemon's fire-and-forget report.
+
+/**
+ * R2 — running → in_progress. When the daemon reports a wake actually started
+ * RUNNING for a task, that task is being worked on now: advance assigned →
+ * in_progress. The `status: "assigned"` WHERE guard makes it atomic + idempotent
+ * (a duplicate running report, or a task already past assigned, is a no-op — it
+ * never clobbers a concurrent claim/submit). Emits the same change event as a
+ * normal claim so the board updates live.
+ *
+ * Only fences `task` entities; ideas/others are ignored. Returns the applied
+ * transition (or null) for observability/tests.
+ * @returns {Promise<{ from: string; to: string } | null>}
+ */
+export type TaskWakeReconcile =
+  | { from: string; to: string }
+  | { attentionReason: string }
+  | { attentionCleared: true }
+  | { nudge: true }
+  | { retry: true }
+  | null;
+
+async function emitTaskChanged(companyUuid: string, taskUuid: string): Promise<void> {
+  const task = await prisma.task.findFirst({
+    where: { uuid: taskUuid, companyUuid },
+    select: { projectUuid: true },
+  });
+  if (task) {
+    eventBus.emitChange({
+      companyUuid,
+      projectUuid: task.projectUuid,
+      entityType: "task",
+      entityUuid: taskUuid,
+      action: "updated",
+    });
+  }
+}
+
+export async function reconcileTaskStatusFromWake(params: {
+  companyUuid: string;
+  status: string;
+  entityType: string | null;
+  entityUuid: string | null;
+  interruptedReason?: string | null;
+}): Promise<TaskWakeReconcile> {
+  const { companyUuid, status, entityType, entityUuid } = params;
+  if (entityType !== "task" || !entityUuid) return null;
+
+  if (status === "running") {
+    // R2 — the wake is running this task now → advance assigned → in_progress AND
+    // clear any stale attention flag, atomically. The status:"assigned" guard makes
+    // it idempotent and race-safe (never clobbers a concurrent submit).
+    const advanced = await prisma.task.updateMany({
+      where: { uuid: entityUuid, companyUuid, status: "assigned" },
+      // Fresh assignment → new in_progress stint: clear the flag AND reset the
+      // per-stint counters so R3/R7 give this stint a fresh nudge + retry budget.
+      data: { status: "in_progress", attentionReason: null, submitNudges: 0, wakeRetries: 0 },
+    });
+    if (advanced.count > 0) {
+      await emitTaskChanged(companyUuid, entityUuid);
+      return { from: "assigned", to: "in_progress" };
+    }
+    // Already past assigned (e.g. a retry / nudge re-wake of an in_progress task):
+    // a recovering task must not stay flagged, so clear a stale attention mark.
+    const cleared = await prisma.task.updateMany({
+      where: { uuid: entityUuid, companyUuid, attentionReason: { not: null } },
+      data: { attentionReason: null },
+    });
+    if (cleared.count > 0) {
+      await emitTaskChanged(companyUuid, entityUuid);
+      return { attentionCleared: true };
+    }
+    return null;
+  }
+
+  if (status === "interrupted") {
+    // R4/R5 — the wake crashed (crash) or was killed for going idle / over budget
+    // (timed_out). Flag the task for a human but KEEP its status (assigned/
+    // in_progress) so a retry (P6) or manual resume can pick it up. Graceful /
+    // human-in-the-loop interrupts are NOT failures: `shutdown` re-drives via
+    // reconnect-backfill, `user` means a human is already on it, `offline` is a
+    // reconcile verdict — none flag. A missing reason defaults to crash.
+    const reason = params.interruptedReason ?? null;
+    if (reason === "shutdown" || reason === "user" || reason === "offline") return null;
+    const attention = reason === "timed_out" ? "timed_out" : "crashed";
+
+    const task = await prisma.task.findFirst({
+      where: { uuid: entityUuid, companyUuid },
+      select: { status: true, wakeRetries: true },
+    });
+    if (!task || (task.status !== "assigned" && task.status !== "in_progress")) return null;
+
+    // R4/R7 — bounded auto-retry BEFORE flagging. A crash / timeout is often
+    // transient (429/500/OOM); retry once (K=1) via a `resume` re-dispatch (the
+    // endpoint sends it). Only after the retry ALSO fails do we flag a human.
+    // wakeRetries survives a retry re-wake's running report, so this is bounded.
+    if (task.wakeRetries < 1) {
+      await prisma.task.updateMany({
+        where: { uuid: entityUuid, companyUuid, wakeRetries: task.wakeRetries },
+        data: { wakeRetries: task.wakeRetries + 1 },
+      });
+      return { retry: true };
+    }
+
+    // Retry exhausted → flag a human (KEEP status resumable).
+    const flagged = await prisma.task.updateMany({
+      where: { uuid: entityUuid, companyUuid, status: { in: ["assigned", "in_progress"] } },
+      data: { attentionReason: attention },
+    });
+    if (flagged.count > 0) {
+      await emitTaskChanged(companyUuid, entityUuid);
+      return { attentionReason: attention };
+    }
+    return null;
+  }
+
+  if (status === "ended") {
+    // R3 — the wake finished cleanly. If the task is STILL in_progress, the agent
+    // stopped without submitting (the exact 20-min-incident failure). Bounded auto
+    // recovery: nudge once (K=1), then escalate to a human.
+    const task = await prisma.task.findFirst({
+      where: { uuid: entityUuid, companyUuid },
+      select: { status: true, submitNudges: true },
+    });
+    if (!task || task.status !== "in_progress") return null; // submitted / not ours → fine
+
+    if (task.submitNudges === 0) {
+      // First finish-without-submit → send ONE focused nudge (endpoint delivers it).
+      // Bump the counter first so a re-wake that ends again escalates instead of
+      // looping. The running report of the nudge re-wake does NOT reset this.
+      await prisma.task.updateMany({
+        where: { uuid: entityUuid, companyUuid, status: "in_progress", submitNudges: 0 },
+        data: { submitNudges: 1 },
+      });
+      return { nudge: true };
+    }
+
+    // Already nudged once and still not submitted → give up auto-recovery, flag a human.
+    const flagged = await prisma.task.updateMany({
+      where: { uuid: entityUuid, companyUuid, status: "in_progress" },
+      data: { attentionReason: "unsubmitted" },
+    });
+    if (flagged.count > 0) {
+      await emitTaskChanged(companyUuid, entityUuid);
+      return { attentionReason: "unsubmitted" };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * R6 — "morning summary" for a project's unattended batch: how many tasks are
+ * running, done-awaiting-verify, or flagged for a human (and WHY). Cheap COUNTs,
+ * so the dashboard can render "8 待验收 · 1 崩溃 · 1 超时 · 1 没提交" at a glance.
+ */
+export async function getTaskAttentionSummary(
+  companyUuid: string,
+  projectUuid: string,
+): Promise<{
+  inProgress: number;
+  toVerify: number;
+  needsAttention: { crashed: number; timedOut: number; unsubmitted: number; total: number };
+}> {
+  const base = { companyUuid, projectUuid };
+  const [inProgress, toVerify, crashed, timedOut, unsubmitted] = await Promise.all([
+    prisma.task.count({ where: { ...base, status: "in_progress" } }),
+    prisma.task.count({ where: { ...base, status: "to_verify" } }),
+    prisma.task.count({ where: { ...base, attentionReason: "crashed" } }),
+    prisma.task.count({ where: { ...base, attentionReason: "timed_out" } }),
+    prisma.task.count({ where: { ...base, attentionReason: "unsubmitted" } }),
+  ]);
+  return {
+    inProgress,
+    toVerify,
+    needsAttention: { crashed, timedOut, unsubmitted, total: crashed + timedOut + unsubmitted },
+  };
+}
+
 // ===== Acceptance Criteria Helpers =====
 
 const emptySummary: AcceptanceSummary = {

@@ -27,6 +27,7 @@ const mockPrisma = vi.hoisted(() => {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       delete: vi.fn(),
       count: vi.fn(),
     },
@@ -123,6 +124,7 @@ import {
   checkAcceptanceCriteriaGate,
   createAcceptanceCriteria,
   replaceAcceptanceCriteria,
+  reconcileTaskStatusFromWake,
 } from "@/services/task.service";
 import { AlreadyClaimedError, NotClaimedError, AssignmentNotOwnedError } from "@/lib/errors";
 
@@ -1769,5 +1771,290 @@ describe("updateTask", () => {
     expect(mockMentionService.parseMentions).toHaveBeenCalledWith(newDesc);
     expect(mockMentionService.createMentions).toHaveBeenCalled();
     expect(mockActivityService.createActivity).toHaveBeenCalled();
+  });
+});
+
+// ===== R2: reconcileTaskStatusFromWake — running → in_progress =====
+describe("reconcileTaskStatusFromWake (R2 — wake running auto-advances task)", () => {
+  const COMPANY = "company-0000-0000-0000-000000000001";
+  const TASK = "task-0000-0000-0000-000000000abc";
+
+  it("advances an assigned task to in_progress on a running report + emits change", async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.task.findFirst.mockResolvedValue({
+      uuid: TASK,
+      projectUuid: "proj-1",
+      project: { uuid: "proj-1" },
+    });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "running",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toEqual({ from: "assigned", to: "in_progress" });
+    // Atomic conditional update: only advances a still-assigned task, clearing any
+    // stale attention flag in the same step.
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, status: "assigned" },
+      data: { status: "in_progress", attentionReason: null, submitNudges: 0, wakeRetries: 0 },
+    });
+    expect(mockEventBus.emitChange).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: "task", entityUuid: TASK, action: "updated" }),
+    );
+  });
+
+  it("is a no-op when the task is no longer assigned (updateMany matches nothing)", async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "running",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toBeNull();
+    expect(mockEventBus.emitChange).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-task entities without any query", async () => {
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "running",
+      entityType: "idea",
+      entityUuid: "idea-1",
+    });
+
+    expect(res).toBeNull();
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not act on a non-running status in P2 (ended/interrupted handled later)", async () => {
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "ended",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toBeNull();
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ===== R4: reconcileTaskStatusFromWake — interrupted → attention flag =====
+describe("reconcileTaskStatusFromWake (R4 — crash flags needs-attention; running clears it)", () => {
+  const COMPANY = "company-0000-0000-0000-000000000001";
+  const TASK = "task-0000-0000-0000-000000000abc";
+
+  it("flags a live task 'crashed' on an interrupted report + emits change (status kept resumable)", async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", wakeRetries: 1, projectUuid: "proj-1" });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "interrupted",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toEqual({ attentionReason: "crashed" });
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, status: { in: ["assigned", "in_progress"] } },
+      data: { attentionReason: "crashed" },
+    });
+    expect(mockEventBus.emitChange).toHaveBeenCalled();
+  });
+
+  it("does not flag a terminal task (interrupted report matches nothing)", async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "interrupted",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toBeNull();
+    expect(mockEventBus.emitChange).not.toHaveBeenCalled();
+  });
+
+  it("running clears a stale attention flag on an already-in_progress task (retry/nudge re-wake)", async () => {
+    // advance (status=assigned) matches nothing; the clear (attentionReason!=null) matches.
+    mockPrisma.task.updateMany
+      .mockResolvedValueOnce({ count: 0 }) // advance: not assigned
+      .mockResolvedValueOnce({ count: 1 }); // clear: had a stale flag
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", wakeRetries: 1, projectUuid: "proj-1" });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "running",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toEqual({ attentionCleared: true });
+    expect(mockPrisma.task.updateMany).toHaveBeenLastCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, attentionReason: { not: null } },
+      data: { attentionReason: null },
+    });
+  });
+});
+
+// ===== R3: reconcileTaskStatusFromWake — ended but still in_progress =====
+describe("reconcileTaskStatusFromWake (R3 — finished-without-submit: nudge once, then escalate)", () => {
+  const COMPANY = "company-0000-0000-0000-000000000001";
+  const TASK = "task-0000-0000-0000-000000000abc";
+
+  it("first ended-while-in_progress → returns nudge + bumps submitNudges to 1", async () => {
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", submitNudges: 0, projectUuid: "proj-1" });
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "ended",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toEqual({ nudge: true });
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, status: "in_progress", submitNudges: 0 },
+      data: { submitNudges: 1 },
+    });
+  });
+
+  it("second ended-while-in_progress (already nudged) → escalates to attentionReason=unsubmitted", async () => {
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", submitNudges: 1, projectUuid: "proj-1" });
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "ended",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toEqual({ attentionReason: "unsubmitted" });
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, status: "in_progress" },
+      data: { attentionReason: "unsubmitted" },
+    });
+    expect(mockEventBus.emitChange).toHaveBeenCalled();
+  });
+
+  it("ended on an already-submitted task (to_verify) → no-op, no nudge, no flag", async () => {
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "to_verify", submitNudges: 0, projectUuid: "proj-1" });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY,
+      status: "ended",
+      entityType: "task",
+      entityUuid: TASK,
+    });
+
+    expect(res).toBeNull();
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ===== R5: reconcile interrupted reason mapping (timed_out vs crash vs graceful) =====
+describe("reconcileTaskStatusFromWake (R5 — interrupt reason → attention mapping)", () => {
+  const COMPANY = "company-0000-0000-0000-000000000001";
+  const TASK = "task-0000-0000-0000-000000000abc";
+
+  it("interrupted(timed_out) flags attentionReason=timed_out", async () => {
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", wakeRetries: 1, projectUuid: "proj-1" });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY, status: "interrupted", entityType: "task",
+      entityUuid: TASK, interruptedReason: "timed_out",
+    });
+
+    expect(res).toEqual({ attentionReason: "timed_out" });
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, status: { in: ["assigned", "in_progress"] } },
+      data: { attentionReason: "timed_out" },
+    });
+  });
+
+  it("interrupted(shutdown) does NOT flag — graceful, re-driven by backfill", async () => {
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY, status: "interrupted", entityType: "task",
+      entityUuid: TASK, interruptedReason: "shutdown",
+    });
+    expect(res).toBeNull();
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("interrupted(user) does NOT flag — a human is already on it", async () => {
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY, status: "interrupted", entityType: "task",
+      entityUuid: TASK, interruptedReason: "user",
+    });
+    expect(res).toBeNull();
+    expect(mockPrisma.task.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// ===== R4/R7: reconcileTaskStatusFromWake — bounded retry before flagging =====
+describe("reconcileTaskStatusFromWake (R4/R7 — retry once, then flag)", () => {
+  const COMPANY = "company-0000-0000-0000-000000000001";
+  const TASK = "task-0000-0000-0000-000000000abc";
+
+  it("FIRST crash (wakeRetries=0) → retry (bump counter), does NOT flag yet", async () => {
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", wakeRetries: 0 });
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY, status: "interrupted", entityType: "task",
+      entityUuid: TASK, interruptedReason: "crash",
+    });
+
+    expect(res).toEqual({ retry: true });
+    expect(mockPrisma.task.updateMany).toHaveBeenCalledWith({
+      where: { uuid: TASK, companyUuid: COMPANY, wakeRetries: 0 },
+      data: { wakeRetries: 1 },
+    });
+    expect(mockEventBus.emitChange).not.toHaveBeenCalled(); // no attention flag on a retry
+  });
+
+  it("FIRST timeout (wakeRetries=0) → retry too (transient 429/500/OOM)", async () => {
+    mockPrisma.task.findFirst.mockResolvedValue({ status: "in_progress", wakeRetries: 0 });
+    mockPrisma.task.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await reconcileTaskStatusFromWake({
+      companyUuid: COMPANY, status: "interrupted", entityType: "task",
+      entityUuid: TASK, interruptedReason: "timed_out",
+    });
+
+    expect(res).toEqual({ retry: true });
+  });
+});
+
+// ===== R6: getTaskAttentionSummary — morning summary counts =====
+describe("getTaskAttentionSummary (R6 — morning summary)", () => {
+  it("aggregates in_progress / to_verify / needs-attention (by reason) counts", async () => {
+    const { getTaskAttentionSummary } = await import("@/services/task.service");
+    // 5 counts in order: inProgress, toVerify, crashed, timedOut, unsubmitted
+    mockPrisma.task.count
+      .mockResolvedValueOnce(3) // in_progress
+      .mockResolvedValueOnce(8) // to_verify
+      .mockResolvedValueOnce(1) // crashed
+      .mockResolvedValueOnce(2) // timed_out
+      .mockResolvedValueOnce(1); // unsubmitted
+
+    const res = await getTaskAttentionSummary("c1", "p1");
+
+    expect(res).toEqual({
+      inProgress: 3,
+      toVerify: 8,
+      needsAttention: { crashed: 1, timedOut: 2, unsubmitted: 1, total: 4 },
+    });
   });
 });

@@ -185,3 +185,30 @@ describe("WakeQueue graceful shutdown (stop + drain)", () => {
     await expect(q.drain(0)).resolves.toBe(true);
   });
 });
+
+describe("WakeQueue batch drain (R1 — unattended overnight batch)", () => {
+  it("drains a batch of same-lane wakes FIFO, and a crashing wake does not wedge the rest", async () => {
+    const q = new WakeQueue({ logger: silent });
+    const started = [];
+    const finished = [];
+    const N = 6;
+    const crashAt = 3; // the 3rd wake throws — simulates an opencode crash mid-batch
+    for (let i = 1; i <= N; i++) {
+      q.enqueue("cwd:D:\\work", async () => {
+        started.push(i);
+        if (i === crashAt) throw new Error(`wake ${i} crashed`);
+        finished.push(i);
+      });
+    }
+    // Let the whole batch drain (serial per lane, auto-advancing on each exit).
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Every wake ran, in FIFO order — #3 crashing did NOT stop #4/#5/#6 (non-blocking).
+    expect(started).toEqual([1, 2, 3, 4, 5, 6]);
+    // #3 crashed so it never finished; the rest all completed.
+    expect(finished).toEqual([1, 2, 4, 5, 6]);
+    // Queue fully drained — nothing left pending or running.
+    expect(q.pendingKeyCount).toBe(0);
+    expect(q.runningKeys()).toEqual([]);
+  });
+});

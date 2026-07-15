@@ -42,6 +42,14 @@ import {
 
 const NOOP_LOGGER = { info() {}, warn() {}, error() {} };
 
+/** Parse a non-negative millisecond value from env, else the default. 0 disables the gate. */
+function envMs(name, def) {
+  const raw = process.env[name];
+  if (raw == null || raw === "") return def;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : def;
+}
+
 /**
  * Map the daemon's backend-agnostic permission mode to opencode flags.
  *   yolo   → --auto  (auto-approve permissions not explicitly denied — full
@@ -165,6 +173,15 @@ export class OpencodeSpawner {
     this.getSessionIdFn = opts.getSessionIdFn ?? defaultGetSessionId;
     this.setSessionIdFn = opts.setSessionIdFn ?? defaultSetSessionId;
     this.resolveOpencodePathFn = opts.resolveOpencodePathFn ?? resolveOpencodePath;
+    // R5 (unattended-batch SPEC) — runaway guard. `idleTimeoutMs`: kill a wake
+    // whose opencode output has been SILENT this long (the shared symptom of an
+    // LLM 429/500 hang or a memory thrash — caught in minutes, not the ceiling).
+    // `maxMs`: absolute per-wake wall-clock ceiling. 0 disables either gate.
+    // `checkIntervalMs`: how often the monitor polls (also the min kill latency).
+    this.idleTimeoutMs = opts.idleTimeoutMs ?? envMs("CHORUS_WAKE_IDLE_TIMEOUT_MS", 12 * 60 * 1000);
+    this.maxMs = opts.maxMs ?? envMs("CHORUS_WAKE_MAX_MS", 40 * 60 * 1000);
+    this.checkIntervalMs = opts.checkIntervalMs ?? 15 * 1000;
+    this.now = opts.now ?? (() => Date.now());
   }
 
   /**
@@ -248,11 +265,38 @@ export class OpencodeSpawner {
         }
       }
 
+      // R5 runaway guard — kill a wake that goes SILENT for idleTimeoutMs (429/500
+      // hang / memory thrash) or runs past maxMs. `lastOutput` is bumped by every
+      // stdout/stderr chunk below, so a busy wake resets the idle clock; a hung one
+      // does not. `timedOut` is threaded back so the waker reports interrupted
+      // (reason "timed_out") and the server flags the task (R4/R5).
+      const wakeStart = this.now();
+      let lastOutput = wakeStart;
+      let timedOut = false;
+      const monitor = setInterval(() => {
+        const now = this.now();
+        const idle = this.idleTimeoutMs > 0 && now - lastOutput > this.idleTimeoutMs;
+        const over = this.maxMs > 0 && now - wakeStart > this.maxMs;
+        if (idle || over) {
+          timedOut = true;
+          this.logger.warn(
+            `[Chorus] killing opencode wake — ${idle ? `no output for ${Math.round((now - lastOutput) / 1000)}s (idle)` : `over ${Math.round((now - wakeStart) / 1000)}s budget`}`,
+          );
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            /* already gone */
+          }
+        }
+      }, this.checkIntervalMs);
+      if (typeof monitor.unref === "function") monitor.unref();
+
       let stdoutBuf = "";
       let observedSessionId = knownSessionId || null;
 
       child.stdout?.setEncoding?.("utf8");
       child.stdout?.on("data", (chunk) => {
+        lastOutput = this.now(); // R5: progress signal — resets the idle clock
         stdoutBuf = parseNdjsonChunk(
           stdoutBuf,
           String(chunk),
@@ -279,16 +323,19 @@ export class OpencodeSpawner {
 
       child.stderr?.setEncoding?.("utf8");
       child.stderr?.on("data", (chunk) => {
+        lastOutput = this.now(); // R5: stderr counts as progress too
         const text = String(chunk).trim();
         if (text) this.logger.warn(`[Chorus] opencode stderr: ${text}`);
       });
 
       child.on("error", (err) => {
+        clearInterval(monitor);
         this.logger.error(`[Chorus] opencode process error: ${err}`);
-        resolve({ sessionId: observedSessionId || anchor, exitCode: null, isNew });
+        resolve({ sessionId: observedSessionId || anchor, exitCode: null, isNew, timedOut });
       });
 
       child.on("close", (code) => {
+        clearInterval(monitor);
         if (code !== 0) {
           this.logger.warn(`[Chorus] opencode exited with code ${code}`);
         }
@@ -297,7 +344,7 @@ export class OpencodeSpawner {
         if (code === 0 && isNew && anchor && observedSessionId) {
           this.setSessionIdFn(anchor, observedSessionId);
         }
-        resolve({ sessionId: observedSessionId || anchor, exitCode: code, isNew });
+        resolve({ sessionId: observedSessionId || anchor, exitCode: code, isNew, timedOut });
       });
 
       child.stdin?.on?.("error", (err) => {
