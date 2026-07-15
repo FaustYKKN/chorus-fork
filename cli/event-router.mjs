@@ -70,6 +70,27 @@ export class EventRouter {
     // dispatch time (before any async work) so concurrent dispatches for the
     // same uuid collapse to one wake.
     this.seen = opts.seen ?? new Set();
+    // Layer 1 — per-cwd wake serialization. The working directory THIS connection
+    // serves (from the connection's Waker.resolveCwd() at wiring time; a connection's
+    // cwd never changes — NFR-3). When set, wakes are serialized per SERVED DIRECTORY
+    // instead of per idea: two wakes for the same cwd share one queue lane (never two
+    // opencode in one working tree), while different cwds run concurrently up to the
+    // queue's global cap. Absent (un-wired unit tests) ⇒ fall back to the per-idea key,
+    // byte-identical to the pre-Layer-1 behavior.
+    this.serveCwd = opts.serveCwd ?? null;
+  }
+
+  /**
+   * The wake queue's serialization lane for a wake (Layer 1). Same served cwd →
+   * same lane → strictly serial (no two opencode in one working tree); different
+   * cwds → different lanes → concurrent up to the global cap. The idea/entity
+   * `key` is STILL passed to wake()/markQueued for server-side attribution and the
+   * session anchor — only the LOCAL serialization lane changes here.
+   * @param {string} ideaKey  keyFor()'s idea/entity key (the pre-Layer-1 lane)
+   * @returns {string}
+   */
+  #laneKey(ideaKey) {
+    return this.serveCwd != null ? `cwd:${this.serveCwd}` : ideaKey;
   }
 
   /**
@@ -371,14 +392,14 @@ export class EventRouter {
     const key = directIdeaUuid ? `idea:${directIdeaUuid}` : `entity:daemon_session:${sessionId}`;
     const attribution = { key, rootIdeaUuid: directIdeaUuid, directIdeaUuid };
 
-    // Mark queued (snapshot) then enqueue on the same per-direct-idea lane as a live
-    // wake — non-throwing so a missing/failed hook never breaks backfill.
+    // Mark queued (snapshot) then enqueue on THIS cwd's serialization lane (Layer 1)
+    // — non-throwing so a missing/failed hook never breaks backfill.
     try {
       this.waker.markQueued?.(n, key, attribution);
     } catch (err) {
       this.logger.warn(`[Chorus] markQueued failed for pending turn ${turnUuid}: ${err}`);
     }
-    this.queue.enqueue(key, () => this.waker.wake(n, key, attribution));
+    this.queue.enqueue(this.#laneKey(key), () => this.waker.wake(n, key, attribution));
   }
 
   /**
@@ -516,13 +537,13 @@ export class EventRouter {
       return;
     }
     // Mark the resource queued (emits a snapshot) BEFORE enqueue, so the server
-    // sees it waiting even while it sits behind a same-direct-idea wake. Optional +
-    // non-throwing so a missing/failed hook never breaks routing.
+    // sees it waiting even while it sits behind another wake on the same cwd lane.
+    // Optional + non-throwing so a missing/failed hook never breaks routing.
     try {
       this.waker.markQueued?.(n, key, attribution);
     } catch (err) {
       this.logger.warn(`[Chorus] markQueued failed for ${label}: ${err}`);
     }
-    this.queue.enqueue(key, () => this.waker.wake(n, key, attribution));
+    this.queue.enqueue(this.#laneKey(key), () => this.waker.wake(n, key, attribution));
   }
 }

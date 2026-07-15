@@ -309,6 +309,12 @@ export function buildDaemon(creds, deps = {}) {
       wakeActions: WAKE_ACTIONS,
       seen,
       getConnectionUuid: () => connectionState.connectionUuid,
+      // Layer 1 — per-cwd wake serialization. This connection's served directory
+      // (resolveCwd is the single cwd source of truth; a connection's cwd never
+      // changes — NFR-3) becomes the wake queue lane, so two wakes for the SAME
+      // directory serialize (never two opencode in one working tree) while
+      // different directories run concurrently up to the queue's global cap.
+      serveCwd: waker.resolveCwd(),
       logger,
     });
 

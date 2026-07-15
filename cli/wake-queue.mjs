@@ -1,11 +1,13 @@
 // cli/wake-queue.mjs
-// Per-key FIFO scheduler with a global concurrency cap. This is what makes the
-// idea_root session anchor safe (cli-daemon spec "Per-root-idea wake
-// serialization", design.md "Concurrency model"):
-//   • within one key (root idea) → strictly serial, FIFO. The 2nd wake waits
-//     for the 1st subprocess to exit, so we never run two
-//     `claude --resume <sameSessionId>` against one session.
-//   • across keys → concurrent, bounded by maxConcurrency.
+// Per-key FIFO scheduler with a global concurrency cap. Keys are opaque strings
+// chosen by the caller (EventRouter). Today the key is the SERVED DIRECTORY
+// (Layer 1 — per-cwd serialization): all wakes for one cwd share a lane, so the
+// 2nd waits for the 1st subprocess to EXIT — never two opencode editing one
+// working tree, and (since a session's transcript is cwd-bound) never two
+// `--resume <sameSession>` against one session either.
+//   • within one key (one served cwd) → strictly serial, FIFO.
+//   • across keys (different cwds) → concurrent, bounded by maxConcurrency
+//     (now a pure resource cap: how many directories run at once).
 //   • enqueue() returns immediately — never blocks the SSE loop.
 //   • a task that throws is logged and the next task for that key proceeds (a
 //     poisoned wake must not wedge the key's queue forever).
