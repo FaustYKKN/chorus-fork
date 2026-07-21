@@ -1640,7 +1640,9 @@
     "loginNote": "First time? Sign in once with {command}.",
     "copy": "Copy",
     "copied": "Copied!",
-    "learnMore": "Learn more about connecting an agent"
+    "learnMore": "Learn more about connecting an agent",
+    "openGuide": "Open install guide",
+    "guideDialogTitle": "Connect an agent"
   },
   "mention": {
     "online": "Online",

@@ -59,7 +59,4 @@ export { MentionBadge, type MentionBadgeProps } from "./mention-badge";
 export {
   DaemonConnectCta,
   type DaemonConnectCtaVariant,
-  DAEMON_NPX_PACKAGE,
-  DAEMON_START_COMMAND,
-  DAEMON_LOGIN_COMMAND,
 } from "./daemon-connect-cta";

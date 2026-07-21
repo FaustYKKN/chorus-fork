@@ -1641,7 +1641,9 @@
     "loginNote": "首次使用？先用 {command} 登录一次。",
     "copy": "复制",
     "copied": "已复制！",
-    "learnMore": "了解如何连接智能体"
+    "learnMore": "了解如何连接智能体",
+    "openGuide": "打开安装指引",
+    "guideDialogTitle": "连接智能体"
   },
   "mention": {
     "online": "在线",

@@ -76,7 +76,6 @@ import {
   ConversationalDispatchError,
   USER_TEXT_MAX_CHARS,
 } from "../conversational-entry";
-import { DAEMON_START_COMMAND } from "../daemon-connect-cta";
 
 type Conn = {
   uuid: string;
@@ -169,8 +168,10 @@ describe("ConversationalEntry — offline gating", () => {
         "No agent daemon is online right now. Start one to describe your idea in a conversation:",
       ),
     ).toBeTruthy();
-    // The startup command comes from the shared constant (never i18n-hardcoded).
-    expect(screen.getByText(DAEMON_START_COMMAND)).toBeTruthy();
+    // The CTA routes to the full install guide rather than a lone command.
+    expect(
+      screen.getByRole("button", { name: "Open install guide" }),
+    ).toBeTruthy();
   });
 
   it("treats an absent presence provider exactly like zero online connections", () => {
@@ -178,7 +179,9 @@ describe("ConversationalEntry — offline gating", () => {
     render(
       <ConversationalEntry buildInstruction={(t) => t} onStarted={vi.fn()} />,
     );
-    expect(screen.getByText(DAEMON_START_COMMAND)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Open install guide" }),
+    ).toBeTruthy();
   });
 
   it("renders a consumer-provided offlineFallback instead of the default CTA", () => {
@@ -191,7 +194,9 @@ describe("ConversationalEntry — offline gating", () => {
       />,
     );
     expect(screen.getByText("custom-fallback")).toBeTruthy();
-    expect(screen.queryByText(DAEMON_START_COMMAND)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Open install guide" }),
+    ).toBeNull();
   });
 });
 

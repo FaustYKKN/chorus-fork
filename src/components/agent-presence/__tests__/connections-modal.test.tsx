@@ -361,12 +361,12 @@ describe("Daemon chat modal — opening + conversation list", () => {
       expect(screen.queryByText("No conversations yet")).toBeTruthy(),
     );
     expect(screen.queryAllByRole("button", { name: "Start session" }).length).toBe(0);
-    // The dead-end card now carries the shared daemon-connect CTA so this surface
-    // matches the pill popover + onboarding completion screen: the npx start
-    // command (verbatim from the single constant) plus a copy control.
-    expect(screen.getByText("npx @chorus-aidlc/chorus daemon")).toBeTruthy();
+    // The dead-end card now carries the shared daemon-connect CTA (open the
+    // install guide), and the modal header carries an always-available guide
+    // entry too — so this empty surface offers an actionable way to connect.
+    // (Two open-guide buttons: header + empty-state CTA.)
     expect(
-      screen.getAllByRole("button", { name: "Copy" }).length,
+      screen.getAllByRole("button", { name: "Open install guide" }).length,
     ).toBeGreaterThan(0);
   });
 

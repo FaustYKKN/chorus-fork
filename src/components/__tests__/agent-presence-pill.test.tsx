@@ -390,7 +390,7 @@ describe("AgentPresencePill — popover content", () => {
     expect(setModalOpen).toHaveBeenCalledWith(true);
   });
 
-  it("popover 0-online empty state shows the daemon-connect CTA (command + copy), not a dead-end sentence", async () => {
+  it("popover 0-online empty state shows the daemon-connect CTA with an open-install-guide action, not a dead-end sentence", async () => {
     setPresence({
       status: "ok",
       onlineCount: 0,
@@ -403,18 +403,17 @@ describe("AgentPresencePill — popover content", () => {
     await user.click(screen.getByRole("button", { name: TRIGGER_LABEL }));
 
     // The dead-end "No agents are online right now." statement is replaced by an
-    // actionable CTA: the npx start command (verbatim from the single constant)
-    // plus a copy control. Asserting the command text guards against the literal
-    // being moved into i18n by mistake.
+    // actionable CTA: a button that opens the full install guide. opencode's
+    // connect flow is multi-step, so we route to the guide instead of printing a
+    // lone (and for opencode, wrong) `npx ... daemon` command.
     expect(
-      await screen.findByText("npx @chorus-aidlc/chorus daemon"),
+      await screen.findByRole("button", {
+        name: enMessages.daemonConnectCta.openGuide,
+      }),
     ).toBeTruthy();
     // The compact CTA body prose resolves from the shared daemonConnectCta
     // namespace (a renamed/missing key would surface as its dotted path).
     expect(screen.getByText(enMessages.daemonConnectCta.body)).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: enMessages.daemonConnectCta.copy }),
-    ).toBeTruthy();
   });
 });
 

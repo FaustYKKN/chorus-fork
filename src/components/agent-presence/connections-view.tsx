@@ -51,6 +51,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InstallGuideDialog } from "@/components/install-guide/InstallGuideDialog";
 import { authFetch } from "@/lib/auth-client";
 import { clientLogger } from "@/lib/logger-client";
 import { useAgentPresence } from "@/contexts/agent-presence-context";
@@ -705,20 +706,26 @@ export function AgentConnectionsView() {
               {t("subtitle")}
             </p>
           </div>
-          {!loading && visibleConnections.length > 0 && (
-            <div className="inline-flex items-center gap-2 self-start rounded-full border border-[#E5E0D8] bg-white px-3.5 py-1.5">
-              <StatusDot online={onlineCount > 0} size="md" />
-              {/* Online-only deck: `total` is the VISIBLE (online) count, not the
-                  raw connection count — offline rows are hidden, so claiming a
-                  higher total than the rendered rows would be misleading. */}
-              <span className="text-[13px] font-medium text-[#2C2C2C]">
-                {t("summary", {
-                  online: onlineCount,
-                  total: visibleConnections.length,
-                })}
-              </span>
-            </div>
-          )}
+          {/* Right side: online summary (only when there are connections) plus an
+              ALWAYS-available install-guide entry — so a user can reopen the
+              opencode connect steps any time, not just at agent-creation. */}
+          <div className="flex items-center gap-2 self-start">
+            {!loading && visibleConnections.length > 0 && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#E5E0D8] bg-white px-3.5 py-1.5">
+                <StatusDot online={onlineCount > 0} size="md" />
+                {/* Online-only deck: `total` is the VISIBLE (online) count, not the
+                    raw connection count — offline rows are hidden, so claiming a
+                    higher total than the rendered rows would be misleading. */}
+                <span className="text-[13px] font-medium text-[#2C2C2C]">
+                  {t("summary", {
+                    online: onlineCount,
+                    total: visibleConnections.length,
+                  })}
+                </span>
+              </div>
+            )}
+            <InstallGuideDialog triggerVariant="outline" />
+          </div>
         </header>
 
         {/* Body */}
