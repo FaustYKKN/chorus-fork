@@ -1160,9 +1160,9 @@
       },
       "opencode": {
         "step1Title": "第 1 步：设置环境变量",
-        "step1WindowsLabel": "Windows（cmd 或 PowerShell，执行后重新打开终端）：",
+        "step1WindowsLabel": "Windows（PowerShell）—— 同时设当前会话并持久化（供自启动），无需重开终端：",
         "step1UnixLabel": "macOS / Linux（建议写入 ~/.bashrc 或 ~/.zshrc）：",
-        "step1Tip": "提示：插件和守护进程都读取这两个变量。Windows 上 setx 只对新开的终端生效；更换过平台地址时，需要重新执行本步骤并重开终端。",
+        "step1Tip": "提示：插件和守护进程都读取这两个变量。上面这行既用 $env: 设置【当前会话】、又用 setx 持久化（供新终端和开机自启动），所以无需重开终端。更换过平台地址时，重新执行本步骤即可。",
         "step2Title": "第 2 步：安装 OpenCode CLI",
         "step2Tip": "桌面客户端只是聊天窗口——平台派发的任务由 CLI 在后台执行，所以 CLI 必须安装（已安装可跳过本步）。",
         "step3Title": "第 3 步：安装 ripgrep（必需组件）",
@@ -1178,6 +1178,10 @@
         "issueCheckin": {
           "title": "无人值守没有反应",
           "fix": "核对 CHORUS_URL / CHORUS_API_KEY 后重跑第 3 步命令（幂等，可放心重跑）；再打开本机控制台 http://127.0.0.1:8638 查看守护进程状态与日志。"
+        },
+        "issueWrongAgent": {
+          "title": "守护进程在跑，却显示没有智能体",
+          "fix": "多半是这台机器还连着【之前安装/别的账号】的智能体。用【本账号】的 key 重连即可：把 $env:CHORUS_API_KEY 设成你自己的 agent key（第 1 步），用 runtime 的 \"daemon stop\" 停掉旧守护进程（或 taskkill /PID <pid> /F —— 绝不用 /IM node.exe），然后重跑第 4 步的 setup，让新守护进程以你的身份重新起来。"
         },
         "step3Tip": "OpenCode 的技能（skill）功能依赖 ripgrep 搜索工具，它默认从 GitHub 下载——内网不通，会导致 chorus 技能加载失败，所以必须从本平台安装。命令最后打印出 ripgrep 的版本号即为成功；重复执行无害。",
         "step4Title": "第 4 步：一条命令开启无人值守",

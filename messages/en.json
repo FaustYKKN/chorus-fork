@@ -1159,9 +1159,9 @@
       },
       "opencode": {
         "step1Title": "Step 1: Set environment variables",
-        "step1WindowsLabel": "Windows (cmd or PowerShell — reopen the terminal afterwards):",
+        "step1WindowsLabel": "Windows (PowerShell) — sets this session and persists for autostart, no reopen needed:",
         "step1UnixLabel": "macOS / Linux (add to ~/.bashrc or ~/.zshrc):",
-        "step1Tip": "Tip: both the plugin and the daemon read these variables. On Windows, setx only affects newly opened terminals; if you switch to a different Chorus URL later, redo this step and reopen the terminal.",
+        "step1Tip": "Tip: both the plugin and the daemon read these variables. The line above sets them for the current session ($env:) AND persists them for future terminals + login-time autostart (setx), so you don't have to reopen the terminal. If you switch to a different Chorus URL later, redo this step.",
         "step2Title": "Step 2: Install the OpenCode CLI",
         "step2Tip": "The desktop client is only a chat window — platform-dispatched tasks are executed by the CLI in the background, so the CLI is required (skip if already installed).",
         "step3Title": "Step 3: Install ripgrep (required component)",
@@ -1177,6 +1177,10 @@
         "issueCheckin": {
           "title": "Unattended mode not responding",
           "fix": "Double-check CHORUS_URL / CHORUS_API_KEY, then re-run the step-3 command (idempotent, safe to repeat); inspect daemon status and logs at the local console http://127.0.0.1:8638."
+        },
+        "issueWrongAgent": {
+          "title": "It shows no agent even though the daemon is running",
+          "fix": "The machine is likely still connected as an agent from a previous install or a different account. Reconnect with THIS account's key: set $env:CHORUS_API_KEY to your own agent key (Step 1), stop the old daemon with the runtime's \"daemon stop\" (or taskkill /PID <pid> /F — never /IM node.exe), then re-run the Step 4 setup so a fresh daemon starts under your identity."
         },
         "step3Tip": "OpenCode's skill feature depends on the ripgrep search tool, which it downloads from GitHub by default — unreachable on the intranet, which breaks the chorus skill. Install it from this platform instead. The command prints the ripgrep version at the end on success; safe to re-run.",
         "step4Title": "Step 4: One command to enable unattended mode",

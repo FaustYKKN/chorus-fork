@@ -56,8 +56,8 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
                 {t("install.opencode.step1WindowsLabel")}
               </p>
               <CodeBlock
-                language="bash"
-                code={`setx CHORUS_URL "${origin}"\nsetx CHORUS_API_KEY "${displayKey}"`}
+                language="powershell"
+                code={`$env:CHORUS_URL = "${origin}"; setx CHORUS_URL "${origin}"\n$env:CHORUS_API_KEY = "${displayKey}"; setx CHORUS_API_KEY "${displayKey}"`}
               />
               <p className="mb-1 mt-3 text-xs text-muted-foreground">
                 {t("install.opencode.step1UnixLabel")}
@@ -147,6 +147,14 @@ export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {t("install.opencode.issueCheckin.fix")}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      {t("install.opencode.issueWrongAgent.title")}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {t("install.opencode.issueWrongAgent.fix")}
                     </p>
                   </div>
                   </div>
