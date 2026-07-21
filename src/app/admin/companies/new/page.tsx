@@ -34,9 +34,14 @@ export default function NewCompanyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name.trim(),
-          emailDomains: [formData.emailDomain.trim()],
-          oidcIssuer: formData.oidcIssuer.trim(),
-          oidcClientId: formData.oidcClientId.trim(),
+          // Email domain + OIDC are optional (invite-code / local-account
+          // companies need neither). Send [] / undefined rather than [""] / ""
+          // so an empty field doesn't create a bogus domain or half-enable OIDC.
+          emailDomains: formData.emailDomain.trim()
+            ? [formData.emailDomain.trim()]
+            : [],
+          oidcIssuer: formData.oidcIssuer.trim() || undefined,
+          oidcClientId: formData.oidcClientId.trim() || undefined,
         }),
       });
 
@@ -111,7 +116,12 @@ export default function NewCompanyPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="emailDomain">{t("admin.emailDomain")}</Label>
+              <Label htmlFor="emailDomain">
+                {t("admin.emailDomain")}{" "}
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({t("common.optional")})
+                </span>
+              </Label>
               <Input
                 id="emailDomain"
                 value={formData.emailDomain}
@@ -119,7 +129,6 @@ export default function NewCompanyPage() {
                   setFormData({ ...formData, emailDomain: e.target.value })
                 }
                 placeholder={t("admin.emailDomainPlaceholder")}
-                required
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
@@ -139,8 +148,8 @@ export default function NewCompanyPage() {
                   {t("admin.oidcConfig")}
                 </CardTitle>
               </div>
-              <Badge variant="destructive" className="text-[11px]">
-                {t("admin.required")}
+              <Badge variant="secondary" className="text-[11px]">
+                {t("common.optional")}
               </Badge>
             </div>
             <CardDescription>
@@ -158,7 +167,6 @@ export default function NewCompanyPage() {
                   setFormData({ ...formData, oidcIssuer: e.target.value })
                 }
                 placeholder={t("admin.oidcIssuerUrlPlaceholder")}
-                required
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
@@ -175,7 +183,6 @@ export default function NewCompanyPage() {
                   setFormData({ ...formData, oidcClientId: e.target.value })
                 }
                 placeholder={t("admin.clientIdPlaceholder")}
-                required
                 disabled={loading}
               />
             </div>
