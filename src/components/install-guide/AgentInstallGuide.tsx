@@ -16,7 +16,7 @@ interface AgentInstallGuideProps {
 }
 
 // Offline plugin tarball served from public/ — bump alongside plugin releases.
-const OPENCODE_PLUGIN_TGZ = "opencode-chorus-0.10.1.tgz";
+const OPENCODE_PLUGIN_TGZ = "opencode-chorus-0.10.2.tgz";
 
 export function AgentInstallGuide({ apiKey }: AgentInstallGuideProps) {
   const t = useTranslations("onboarding");
