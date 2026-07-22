@@ -7,6 +7,7 @@ import { withErrorHandler, parseBody, parsePagination } from "@/lib/api-handler"
 import { success, paginated, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
 import { projectExists } from "@/services/project.service";
+import { requireProjectAccess } from "@/lib/team-visibility";
 import { listIdeas, createIdea } from "@/services/idea.service";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
@@ -27,6 +28,9 @@ export const GET = withErrorHandler<{ uuid: string }>(
     // Parse filter parameters
     const url = new URL(request.url);
     const statusFilter = url.searchParams.get("status") || undefined;
+
+    const projectDenied = await requireProjectAccess(auth, projectUuid);
+    if (projectDenied) return projectDenied;
 
     // Validate project exists
     if (!(await projectExists(auth.companyUuid, projectUuid))) {
@@ -63,6 +67,9 @@ export const POST = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid: projectUuid } = await context.params;
+
+    const projectDenied = await requireProjectAccess(auth, projectUuid);
+    if (projectDenied) return projectDenied;
 
     // Validate project exists
     if (!(await projectExists(auth.companyUuid, projectUuid))) {

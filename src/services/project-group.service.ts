@@ -221,10 +221,22 @@ export async function getProjectGroup(
 }
 
 export async function listProjectGroups(
-  companyUuid: string
+  companyUuid: string,
+  viewerUserUuid?: string | null
 ): Promise<{ groups: ProjectGroupResponse[]; total: number; ungroupedCount: number }> {
+  // Team-scoping (R1): a user sees only teams they belong to. Omit viewerUserUuid
+  // for system/admin callers that intentionally list every group.
+  let groupWhere: { companyUuid: string; uuid?: { in: string[] } } = { companyUuid };
+  if (viewerUserUuid !== undefined) {
+    const memberships = await prisma.teamMember.findMany({
+      where: { companyUuid, userUuid: viewerUserUuid ?? "" },
+      select: { groupUuid: true },
+    });
+    groupWhere = { companyUuid, uuid: { in: memberships.map((m) => m.groupUuid) } };
+  }
+
   const groups = await prisma.projectGroup.findMany({
-    where: { companyUuid },
+    where: groupWhere,
     orderBy: { createdAt: "asc" },
   });
 

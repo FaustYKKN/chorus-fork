@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
-import { resolveViewerUserUuid } from "@/lib/team-visibility";
+import { resolveViewerUserUuid, requireProjectAccess } from "@/lib/team-visibility";
 import {
   getProject,
   updateProject,
@@ -66,6 +66,9 @@ export const PATCH = withErrorHandler(async (request: NextRequest, context: Rout
 
   const { uuid } = await context.params;
 
+  const projectDenied = await requireProjectAccess(auth, uuid);
+  if (projectDenied) return projectDenied;
+
   const body = await parseBody<{
     name?: string;
     description?: string;
@@ -115,6 +118,9 @@ export const DELETE = withErrorHandler(async (request: NextRequest, context: Rou
   }
 
   const { uuid } = await context.params;
+
+  const projectDenied = await requireProjectAccess(auth, uuid);
+  if (projectDenied) return projectDenied;
 
   const deleted = await deleteProject(auth.companyUuid, uuid);
   if (!deleted) {

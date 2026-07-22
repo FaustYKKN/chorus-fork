@@ -12,6 +12,7 @@ import * as documentService from "@/services/document.service";
 import * as taskService from "@/services/task.service";
 import * as proposalService from "@/services/proposal.service";
 import * as activityService from "@/services/activity.service";
+import { resolveViewerUserUuid, canAccessProject } from "@/lib/team-visibility";
 import * as commentService from "@/services/comment.service";
 import * as assignmentService from "@/services/assignment.service";
 import { zArray } from "./schema-utils";
@@ -63,10 +64,12 @@ export function registerPublicTools(server: McpServer, auth: AgentAuthContext) {
     },
     async ({ page, pageSize }) => {
       const skip = (page - 1) * pageSize;
+      // R9: an agent sees what its owner sees (owner's teams + company-wide).
       const result = await projectService.listProjects({
         companyUuid: auth.companyUuid,
         skip,
         take: pageSize,
+        viewerUserUuid: await resolveViewerUserUuid(auth),
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -231,9 +234,9 @@ export function registerPublicTools(server: McpServer, auth: AgentAuthContext) {
       }),
     },
     async ({ projectUuid, status, priority, proposalUuids, page = 1, pageSize = 20 }) => {
-      // Verify project exists
+      // Verify project exists AND is visible to this agent's owner (R9)
       const project = await projectService.getProjectByUuid(auth.companyUuid, projectUuid);
-      if (!project) {
+      if (!project || !(await canAccessProject(auth.companyUuid, await resolveViewerUserUuid(auth), projectUuid))) {
         return { content: [{ type: "text", text: "Project not found" }], isError: true };
       }
 

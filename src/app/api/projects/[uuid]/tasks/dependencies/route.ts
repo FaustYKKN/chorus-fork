@@ -6,6 +6,7 @@ import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
 import { projectExists } from "@/services/project.service";
+import { requireProjectAccess } from "@/lib/team-visibility";
 import { getProjectTaskDependencies } from "@/services/task.service";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
@@ -21,6 +22,9 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid: projectUuid } = await context.params;
+
+    const projectDenied = await requireProjectAccess(auth, projectUuid);
+    if (projectDenied) return projectDenied;
 
     // Validate project exists
     if (!(await projectExists(auth.companyUuid, projectUuid))) {

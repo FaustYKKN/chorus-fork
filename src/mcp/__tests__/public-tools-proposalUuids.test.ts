@@ -33,6 +33,12 @@ vi.mock("@/services/mention.service", () => ({}));
 vi.mock("@/services/session.service", () => ({}));
 vi.mock("@/services/search.service", () => ({}));
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+// Team visibility is exercised in its own suite; here it's a pass-through so the
+// proposalUuids filtering assertions stay focused.
+vi.mock("@/lib/team-visibility", () => ({
+  resolveViewerUserUuid: vi.fn().mockResolvedValue("owner-1"),
+  canAccessProject: vi.fn().mockResolvedValue(true),
+}));
 
 // Capture tool handlers via a fake McpServer
 type ToolHandler = (params: Record<string, unknown>) => Promise<unknown>;

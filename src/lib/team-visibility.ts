@@ -92,3 +92,17 @@ export async function requireProjectAccess(
   const ok = await canAccessProject(auth.companyUuid, viewer, projectUuid);
   return ok ? null : errors.notFound("Project");
 }
+
+// Route guard for team-scoped surfaces (team detail / dashboard): only members
+// may see a team (R1). 404 — don't reveal a team you're not in.
+export async function requireTeamMembership(
+  auth: AuthContext,
+  groupUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const viewer = await resolveViewerUserUuid(auth);
+  if (!viewer) return errors.notFound("Team");
+  const member = await prisma.teamMember.findFirst({
+    where: { companyUuid: auth.companyUuid, groupUuid, userUuid: viewer },
+  });
+  return member ? null : errors.notFound("Team");
+}

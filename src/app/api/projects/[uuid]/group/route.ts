@@ -6,6 +6,7 @@ import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission } from "@/lib/auth";
 import { moveProjectToGroup } from "@/services/project-group.service";
+import { requireProjectAccess } from "@/lib/team-visibility";
 
 // PATCH /api/projects/[uuid]/group
 export const PATCH = withErrorHandler(
@@ -21,6 +22,10 @@ export const PATCH = withErrorHandler(
     }
 
     const { uuid } = await context.params;
+
+    const projectDenied = await requireProjectAccess(auth, uuid);
+    if (projectDenied) return projectDenied;
+
     const body = await parseBody<{ groupUuid: string | null }>(request);
 
     const result = await moveProjectToGroup(

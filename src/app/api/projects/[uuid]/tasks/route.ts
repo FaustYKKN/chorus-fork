@@ -68,6 +68,9 @@ export const POST = withErrorHandler<{ uuid: string }>(
 
     const { uuid: projectUuid } = await context.params;
 
+    const projectDenied = await requireProjectAccess(auth, projectUuid);
+    if (projectDenied) return projectDenied;
+
     // Validate project exists
     if (!(await projectExists(auth.companyUuid, projectUuid))) {
       return errors.notFound("Project");

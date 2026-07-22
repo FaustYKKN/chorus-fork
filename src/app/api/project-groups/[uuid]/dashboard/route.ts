@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
+import { requireTeamMembership } from "@/lib/team-visibility";
 import { getGroupDashboard } from "@/services/project-group.service";
 
 // GET /api/project-groups/[uuid]/dashboard
@@ -16,6 +17,9 @@ export const GET = withErrorHandler(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+    const teamDenied = await requireTeamMembership(auth, uuid);
+    if (teamDenied) return teamDenied;
+
     const dashboard = await getGroupDashboard(auth.companyUuid, uuid);
     if (!dashboard) return errors.notFound("Project group");
 

@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
+import { resolveViewerUserUuid } from "@/lib/team-visibility";
 import {
   listProjectGroups,
   createProjectGroup,
@@ -17,7 +18,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   const denied = checkAgentPermission(auth, "project:read");
   if (denied) return denied;
 
-  const result = await listProjectGroups(auth.companyUuid);
+  const result = await listProjectGroups(auth.companyUuid, await resolveViewerUserUuid(auth));
   return success(result);
 });
 
