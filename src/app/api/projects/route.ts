@@ -7,6 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { withErrorHandler, parseBody, parsePagination } from "@/lib/api-handler";
 import { success, paginated, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
+import {
+  resolveViewerUserUuid,
+  getMemberTeamUuids,
+  projectVisibilityWhere,
+} from "@/lib/team-visibility";
 
 // GET /api/projects - List Projects
 export const GET = withErrorHandler(async (request: NextRequest) => {
@@ -19,9 +24,16 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   const { page, pageSize, skip, take } = parsePagination(request);
 
+  // Team-scoping: viewer sees company-wide (team-less) projects + their teams'.
+  const viewer = await resolveViewerUserUuid(auth);
+  const where = {
+    companyUuid: auth.companyUuid,
+    ...projectVisibilityWhere(await getMemberTeamUuids(auth.companyUuid, viewer ?? "")),
+  };
+
   const [projects, total] = await Promise.all([
     prisma.project.findMany({
-      where: { companyUuid: auth.companyUuid },
+      where,
       skip,
       take,
       orderBy: { updatedAt: "desc" },
@@ -46,9 +58,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         },
       },
     }),
-    prisma.project.count({
-      where: { companyUuid: auth.companyUuid },
-    }),
+    prisma.project.count({ where }),
   ]);
 
   // Transform to API response format

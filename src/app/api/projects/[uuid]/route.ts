@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
+import { resolveViewerUserUuid } from "@/lib/team-visibility";
 import {
   getProject,
   updateProject,
@@ -24,7 +25,7 @@ export const GET = withErrorHandler(async (request: NextRequest, context: RouteC
   if (denied) return denied;
 
   const { uuid } = await context.params;
-  const project = await getProject(auth.companyUuid, uuid);
+  const project = await getProject(auth.companyUuid, uuid, await resolveViewerUserUuid(auth));
 
   if (!project) {
     return errors.notFound("Project");

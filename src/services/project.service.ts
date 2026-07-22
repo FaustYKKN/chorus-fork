@@ -4,11 +4,15 @@
 
 import { prisma } from "@/lib/prisma";
 import { eventBus } from "@/lib/event-bus";
+import { getMemberTeamUuids, projectVisibilityWhere } from "@/lib/team-visibility";
 
 export interface ProjectListParams {
   companyUuid: string;
   skip: number;
   take: number;
+  // When provided, restrict to projects this user may see (team member + company-wide).
+  // Omit (undefined) for system/admin callers that intentionally bypass team scoping.
+  viewerUserUuid?: string | null;
 }
 
 export interface ProjectCreateParams {
@@ -24,10 +28,17 @@ export interface ProjectUpdateParams {
 }
 
 // List projects query
-export async function listProjects({ companyUuid, skip, take }: ProjectListParams) {
+export async function listProjects({ companyUuid, skip, take, viewerUserUuid }: ProjectListParams) {
+  // Team-scoping: a viewer sees company-wide (team-less) projects + their teams'.
+  const visibility =
+    viewerUserUuid !== undefined
+      ? projectVisibilityWhere(await getMemberTeamUuids(companyUuid, viewerUserUuid ?? ""))
+      : {};
+  const where = { companyUuid, ...visibility };
+
   const [projects, total] = await Promise.all([
     prisma.project.findMany({
-      where: { companyUuid },
+      where,
       skip,
       take,
       orderBy: { updatedAt: "desc" },
@@ -48,15 +59,20 @@ export async function listProjects({ companyUuid, skip, take }: ProjectListParam
         },
       },
     }),
-    prisma.project.count({ where: { companyUuid } }),
+    prisma.project.count({ where }),
   ]);
 
   return { projects, total };
 }
 
-// Get project details
-export async function getProject(companyUuid: string, uuid: string) {
-  return prisma.project.findFirst({
+// Get project details. When viewerUserUuid is provided, returns null if the
+// viewer may not see the project (team-scoped); omit it for system/admin callers.
+export async function getProject(
+  companyUuid: string,
+  uuid: string,
+  viewerUserUuid?: string | null
+) {
+  const project = await prisma.project.findFirst({
     where: { uuid, companyUuid },
     select: {
       uuid: true,
@@ -76,6 +92,14 @@ export async function getProject(companyUuid: string, uuid: string) {
       },
     },
   });
+  if (!project) return null;
+  if (viewerUserUuid !== undefined && project.groupUuid !== null) {
+    const member = await prisma.teamMember.findFirst({
+      where: { companyUuid, groupUuid: project.groupUuid, userUuid: viewerUserUuid ?? "" },
+    });
+    if (!member) return null;
+  }
+  return project;
 }
 
 // Verify if project exists
