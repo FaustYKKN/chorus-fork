@@ -19,6 +19,8 @@ export interface TeamMemberEntry {
   userUuid: string;
   role: "owner" | "member";
   createdAt: string;
+  name: string | null;
+  email: string | null;
 }
 
 export interface ProjectGroupUpdateParams {
@@ -492,12 +494,20 @@ export async function listTeamMembers(
 ): Promise<TeamMemberEntry[]> {
   const rows = await prisma.teamMember.findMany({
     where: { companyUuid, groupUuid },
-    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+    // owner first ("owner" > "member" so desc), then by join time.
+    orderBy: [{ role: "desc" }, { createdAt: "asc" }],
   });
+  const users = await prisma.user.findMany({
+    where: { companyUuid, uuid: { in: rows.map((r) => r.userUuid) } },
+    select: { uuid: true, name: true, email: true },
+  });
+  const byUuid = new Map(users.map((u) => [u.uuid, u]));
   return rows.map((r) => ({
     userUuid: r.userUuid,
     role: r.role as "owner" | "member",
     createdAt: r.createdAt.toISOString(),
+    name: byUuid.get(r.userUuid)?.name ?? null,
+    email: byUuid.get(r.userUuid)?.email ?? null,
   }));
 }
 

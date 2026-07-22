@@ -1648,6 +1648,24 @@
     "openGuide": "Open install guide",
     "guideDialogTitle": "Connect an agent"
   },
+  "teamMembers": {
+    "title": "Members — {team}",
+    "ownerHint": "As the team owner, add or remove members. You can't leave your own team.",
+    "memberHint": "People on this team see its projects and task boards.",
+    "loading": "Loading…",
+    "loadError": "Couldn't load members.",
+    "addError": "Couldn't add member.",
+    "removeError": "Couldn't remove member.",
+    "leaveError": "Couldn't leave the team.",
+    "you": "you",
+    "owner": "Owner",
+    "member": "Member",
+    "remove": "Remove",
+    "addTitle": "Add a member",
+    "searchPlaceholder": "Search people in your company…",
+    "leave": "Leave team",
+    "membersButton": "Members"
+  },
   "mention": {
     "online": "Online",
     "offline": "Offline",

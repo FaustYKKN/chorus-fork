@@ -11,9 +11,11 @@ import {
   Settings,
   ChevronRight,
   Plus,
+  Users,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-client";
 import { ManageProjectGroupDialog } from "@/components/manage-project-group-dialog";
+import { TeamMembersDialog } from "@/components/team-members-dialog";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { getProjectInitials, getProjectIconColor } from "@/lib/project-colors";
 import { formatDateTime } from "@/lib/format-date";
@@ -103,6 +105,7 @@ export default function ProjectGroupDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [showManage, setShowManage] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
 
   const fetchDashboard = async () => {
     try {
@@ -207,15 +210,26 @@ export default function ProjectGroupDashboardPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowManage(true)}
-          className="gap-2 rounded-lg border-[#E5E2DC] bg-white text-[13px] font-medium text-[#2C2C2C] hover:border-[#C67A52] hover:bg-white"
-        >
-          <Settings className="h-3.5 w-3.5 text-[#6B6B6B]" />
-          {t("projectGroups.manageGroup")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowMembers(true)}
+            className="gap-2 rounded-lg border-[#E5E2DC] bg-white text-[13px] font-medium text-[#2C2C2C] hover:border-[#C67A52] hover:bg-white"
+          >
+            <Users className="h-3.5 w-3.5 text-[#6B6B6B]" />
+            {t("teamMembers.membersButton")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowManage(true)}
+            className="gap-2 rounded-lg border-[#E5E2DC] bg-white text-[13px] font-medium text-[#2C2C2C] hover:border-[#C67A52] hover:bg-white"
+          >
+            <Settings className="h-3.5 w-3.5 text-[#6B6B6B]" />
+            {t("projectGroups.manageGroup")}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Overview Row */}
@@ -358,6 +372,14 @@ export default function ProjectGroupDashboardPage() {
           setShowCreateProject(false);
           fetchDashboard();
         }}
+      />
+
+      {/* Team Members Dialog */}
+      <TeamMembersDialog
+        open={showMembers}
+        onOpenChange={setShowMembers}
+        groupUuid={group.uuid}
+        groupName={group.name}
       />
 
       {/* Manage Group Dialog */}

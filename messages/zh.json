@@ -1649,6 +1649,24 @@
     "openGuide": "打开安装指引",
     "guideDialogTitle": "连接智能体"
   },
+  "teamMembers": {
+    "title": "成员 — {team}",
+    "ownerHint": "你是组长，可增删成员。组长不能退出自己的团队。",
+    "memberHint": "团队成员能看到该团队的项目和任务看板。",
+    "loading": "加载中…",
+    "loadError": "加载成员失败。",
+    "addError": "添加成员失败。",
+    "removeError": "移除成员失败。",
+    "leaveError": "退出团队失败。",
+    "you": "你",
+    "owner": "组长",
+    "member": "成员",
+    "remove": "移除",
+    "addTitle": "添加成员",
+    "searchPlaceholder": "搜索公司内的人…",
+    "leave": "退出团队",
+    "membersButton": "成员"
+  },
   "mention": {
     "online": "在线",
     "offline": "离线",
