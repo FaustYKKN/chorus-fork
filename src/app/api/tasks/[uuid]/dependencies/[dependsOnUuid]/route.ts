@@ -6,6 +6,7 @@ import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
 import { getTaskByUuid, removeTaskDependency } from "@/services/task.service";
+import { requireTaskAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string; dependsOnUuid: string }> };
 
@@ -20,6 +21,9 @@ export const DELETE = withErrorHandler<{ uuid: string; dependsOnUuid: string }>(
     if (denied) return denied;
 
     const { uuid, dependsOnUuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     // Validate task exists
     const task = await getTaskByUuid(auth.companyUuid, uuid);

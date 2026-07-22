@@ -6,6 +6,7 @@ import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
 import { setIdeaParent } from "@/services/idea.service";
+import { requireIdeaAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -21,6 +22,10 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const body = await parseBody<{ parentUuid: string | null }>(request);
 
     // parentUuid is required in the body but may be explicitly null (detach).

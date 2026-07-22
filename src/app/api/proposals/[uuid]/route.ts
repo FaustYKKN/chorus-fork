@@ -7,6 +7,7 @@ import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
 import { getProposal } from "@/services/proposal.service";
+import { requireProposalAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -21,6 +22,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireProposalAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const proposal = await getProposal(auth.companyUuid, uuid);
 
     if (!proposal) {

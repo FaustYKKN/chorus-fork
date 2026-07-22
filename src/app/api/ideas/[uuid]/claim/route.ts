@@ -10,6 +10,7 @@ import { getAuthContext, isUser, isAgent, hasPermission } from "@/lib/auth";
 import { computeEffectivePermissions } from "@/lib/authz/permissions";
 import { getIdeaByUuid, claimIdea } from "@/services/idea.service";
 import { AlreadyClaimedError, AssignmentNotOwnedError } from "@/lib/errors";
+import { requireIdeaAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -22,6 +23,9 @@ export const POST = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const idea = await getIdeaByUuid(auth.companyUuid, uuid);
     if (!idea) {

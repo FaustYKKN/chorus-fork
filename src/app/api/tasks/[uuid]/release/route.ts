@@ -8,6 +8,7 @@ import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAssignee, checkAgentPermission } from "@/lib/auth";
 import { getTaskByUuid, releaseTask } from "@/services/task.service";
 import { NotClaimedError } from "@/lib/errors";
+import { requireTaskAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -22,6 +23,9 @@ export const POST = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const task = await getTaskByUuid(auth.companyUuid, uuid);
     if (!task) {

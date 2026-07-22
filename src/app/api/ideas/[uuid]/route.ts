@@ -13,6 +13,7 @@ import {
   deleteIdea,
   isValidIdeaStatusTransition,
 } from "@/services/idea.service";
+import { requireIdeaAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -27,6 +28,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const idea = await getIdea(auth.companyUuid, uuid);
 
     if (!idea) {
@@ -48,6 +53,9 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     // Get original Idea data for permission check
     const idea = await getIdeaByUuid(auth.companyUuid, uuid);
@@ -120,6 +128,9 @@ export const DELETE = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const idea = await getIdeaByUuid(auth.companyUuid, uuid);
     if (!idea) {

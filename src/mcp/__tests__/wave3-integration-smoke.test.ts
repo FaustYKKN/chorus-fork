@@ -92,6 +92,10 @@ vi.mock("@/services/proposal.service", () => mockProposalService);
 vi.mock("@/services/activity.service", () => mockActivityService);
 vi.mock("@/services/session.service", () => mockSessionService);
 vi.mock("@/lib/prisma", () => mockPrisma);
+vi.mock("@/lib/team-visibility", () => ({
+  resolveViewerUserUuid: vi.fn().mockResolvedValue("owner-1"),
+  canAccessProject: vi.fn().mockResolvedValue(true),
+}));
 
 vi.mock("@/services/idea.service", () => ({}));
 vi.mock("@/services/document.service", () => ({}));

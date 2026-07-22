@@ -7,6 +7,7 @@ import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission } from "@/lib/auth";
 import { getSessionsForTask } from "@/services/session.service";
+import { requireTaskAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -27,6 +28,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const sessions = await getSessionsForTask(auth.companyUuid, uuid);
 
     return success(sessions);

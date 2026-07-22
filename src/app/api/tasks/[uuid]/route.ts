@@ -15,6 +15,7 @@ import {
   checkDependenciesResolved,
 } from "@/services/task.service";
 import { createActivity } from "@/services/activity.service";
+import { requireTaskAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -29,6 +30,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const task = await getTask(auth.companyUuid, uuid);
 
     if (!task) {
@@ -50,6 +55,9 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     // Get original Task data for permission check
     const task = await getTaskByUuid(auth.companyUuid, uuid);
@@ -180,6 +188,9 @@ export const DELETE = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const task = await getTaskByUuid(auth.companyUuid, uuid);
     if (!task) {

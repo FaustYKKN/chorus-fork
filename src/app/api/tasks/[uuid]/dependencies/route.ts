@@ -10,6 +10,7 @@ import {
   addTaskDependency,
   getTaskDependencies,
 } from "@/services/task.service";
+import { requireTaskAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -24,6 +25,9 @@ export const POST = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     // Validate task exists
     const task = await getTaskByUuid(auth.companyUuid, uuid);
@@ -63,6 +67,9 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireTaskAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const task = await getTaskByUuid(auth.companyUuid, uuid);
     if (!task) {

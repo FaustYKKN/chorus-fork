@@ -12,6 +12,7 @@ import {
   updateDocument,
   deleteDocument,
 } from "@/services/document.service";
+import { requireDocumentAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -26,6 +27,10 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireDocumentAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
+
     const document = await getDocument(auth.companyUuid, uuid);
 
     if (!document) {
@@ -54,6 +59,9 @@ export const PATCH = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireDocumentAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     // Get the original Document data
     const document = await getDocumentByUuid(auth.companyUuid, uuid);
@@ -100,6 +108,9 @@ export const DELETE = withErrorHandler<{ uuid: string }>(
     }
 
     const { uuid } = await context.params;
+
+    const accessDenied = await requireDocumentAccess(auth, uuid);
+    if (accessDenied) return accessDenied;
 
     const document = await getDocumentByUuid(auth.companyUuid, uuid);
     if (!document) {

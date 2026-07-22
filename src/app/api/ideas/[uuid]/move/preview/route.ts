@@ -9,6 +9,7 @@ import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, checkAgentPermission } from "@/lib/auth";
 import { getIdeaByUuid, moveIdeaPreview } from "@/services/idea.service";
+import { requireIdeaAccess } from "@/lib/team-visibility";
 
 type RouteContext = { params: Promise<{ uuid: string }> };
 
@@ -30,6 +31,9 @@ export const GET = withErrorHandler<{ uuid: string }>(
     if (denied) return denied;
 
     const { uuid: ideaUuid } = await context.params;
+
+    const accessDenied = await requireIdeaAccess(auth, ideaUuid);
+    if (accessDenied) return accessDenied;
 
     const targetProjectUuid = request.nextUrl.searchParams.get("targetProjectUuid");
     if (!targetProjectUuid) {

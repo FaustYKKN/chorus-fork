@@ -3,6 +3,7 @@
 // UUID-Based Architecture: All operations use UUIDs
 
 import { prisma } from "@/lib/prisma";
+import { getVisibleProjectUuids, getMemberTeamUuids } from "@/lib/team-visibility";
 
 // ===== Type Definitions =====
 
@@ -16,6 +17,9 @@ export interface SearchParams {
   scopeUuid?: string;  // project group UUID or project UUID
   entityTypes?: EntityType[];
   limit?: number;
+  // Team-scoping (P2): restrict results to what this viewer may see (their teams'
+  // projects + company-wide). Omit for system/admin callers that search everything.
+  viewerUserUuid?: string | null;
 }
 
 export interface SearchResult {
@@ -367,12 +371,13 @@ async function searchProjectGroups(
   companyUuid: string,
   query: string,
   groupUuid: string | null,
-  limit: number
+  limit: number,
+  restrictGroupUuids: string[] | null = null
 ): Promise<{ results: SearchResult[]; count: number }> {
   const where: {
     companyUuid: string;
     OR: Array<{ name: { contains: string; mode: "insensitive" } } | { description: { contains: string; mode: "insensitive" } }>;
-    uuid?: string;
+    uuid?: string | { in: string[] };
   } = {
     companyUuid,
     OR: [
@@ -381,9 +386,12 @@ async function searchProjectGroups(
     ],
   };
 
-  // For group scope: return only that specific group if it matches
+  // For group scope: return only that specific group if it matches.
+  // Otherwise, when team-scoped, restrict to the viewer's member teams (R1).
   if (groupUuid) {
     where.uuid = groupUuid;
+  } else if (restrictGroupUuids) {
+    where.uuid = { in: restrictGroupUuids };
   }
 
   const [groups, count] = await Promise.all([
@@ -425,6 +433,7 @@ export async function search(params: SearchParams): Promise<SearchResponse> {
     scopeUuid,
     entityTypes,
     limit = 20,
+    viewerUserUuid,
   } = params;
 
   // Validate scope requirements
@@ -445,6 +454,16 @@ export async function search(params: SearchParams): Promise<SearchResponse> {
   } else if (scope === "group" && scopeUuid) {
     projectUuids = await resolveGroupProjects(companyUuid, scopeUuid);
     groupUuid = scopeUuid;
+  }
+
+  // Team-scoping (P2): a viewer's results are restricted to their visible projects
+  // (their teams' + company-wide) and, for team results, their member teams.
+  let restrictGroupUuids: string[] | null = null;
+  if (viewerUserUuid !== undefined) {
+    const visible = await getVisibleProjectUuids(companyUuid, viewerUserUuid ?? "");
+    projectUuids =
+      projectUuids === null ? visible : projectUuids.filter((u) => visible.includes(u));
+    restrictGroupUuids = await getMemberTeamUuids(companyUuid, viewerUserUuid ?? "");
   }
 
   // Execute searches in parallel
@@ -471,7 +490,9 @@ export async function search(params: SearchParams): Promise<SearchResponse> {
         searchPromises.push(searchProjects(companyUuid, query, projectUuids, limit));
         break;
       case "project_group":
-        searchPromises.push(searchProjectGroups(companyUuid, query, groupUuid, limit));
+        searchPromises.push(
+          searchProjectGroups(companyUuid, query, groupUuid, limit, restrictGroupUuids)
+        );
         break;
     }
   }

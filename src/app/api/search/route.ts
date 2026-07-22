@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext } from "@/lib/auth";
+import { resolveViewerUserUuid } from "@/lib/team-visibility";
 import { search, type EntityType, type SearchScope } from "@/services/search.service";
 
 // GET /api/search - Search across entities
@@ -76,6 +77,7 @@ export const GET = withErrorHandler(
       scopeUuid,
       entityTypes,
       limit,
+      viewerUserUuid: await resolveViewerUserUuid(auth),
     });
 
     return success(result);

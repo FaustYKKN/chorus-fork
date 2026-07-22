@@ -93,6 +93,56 @@ export async function requireProjectAccess(
   return ok ? null : errors.notFound("Project");
 }
 
+// Entity-direct route guards: resolve the entity's project, then reuse the
+// project gate. 404 (not 403) whether the entity is missing or in a hidden team.
+export async function requireTaskAccess(
+  auth: AuthContext,
+  taskUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const task = await prisma.task.findFirst({
+    where: { uuid: taskUuid, companyUuid: auth.companyUuid },
+    select: { projectUuid: true },
+  });
+  if (!task) return errors.notFound("Task");
+  return requireProjectAccess(auth, task.projectUuid);
+}
+
+export async function requireIdeaAccess(
+  auth: AuthContext,
+  ideaUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const idea = await prisma.idea.findFirst({
+    where: { uuid: ideaUuid, companyUuid: auth.companyUuid },
+    select: { projectUuid: true },
+  });
+  if (!idea) return errors.notFound("Idea");
+  return requireProjectAccess(auth, idea.projectUuid);
+}
+
+export async function requireProposalAccess(
+  auth: AuthContext,
+  proposalUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const proposal = await prisma.proposal.findFirst({
+    where: { uuid: proposalUuid, companyUuid: auth.companyUuid },
+    select: { projectUuid: true },
+  });
+  if (!proposal) return errors.notFound("Proposal");
+  return requireProjectAccess(auth, proposal.projectUuid);
+}
+
+export async function requireDocumentAccess(
+  auth: AuthContext,
+  documentUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const doc = await prisma.document.findFirst({
+    where: { uuid: documentUuid, companyUuid: auth.companyUuid },
+    select: { projectUuid: true },
+  });
+  if (!doc) return errors.notFound("Document");
+  return requireProjectAccess(auth, doc.projectUuid);
+}
+
 // Route guard for team-scoped surfaces (team detail / dashboard): only members
 // may see a team (R1). 404 — don't reveal a team you're not in.
 export async function requireTeamMembership(
