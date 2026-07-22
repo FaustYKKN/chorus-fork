@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission, checkAgentPermission } from "@/lib/auth";
-import { requireTeamMembership } from "@/lib/team-visibility";
+import { requireTeamMembership, requireTeamOwner } from "@/lib/team-visibility";
 import {
   getProjectGroup,
   updateProjectGroup,
@@ -45,6 +45,10 @@ export const PATCH = withErrorHandler(
     }
 
     const { uuid } = await context.params;
+    // R5: only the team owner may rename/describe the team.
+    const ownerDenied = await requireTeamOwner(auth, uuid);
+    if (ownerDenied) return ownerDenied;
+
     const body = await parseBody<{ name?: string; description?: string }>(request);
 
     const group = await updateProjectGroup({
@@ -64,19 +68,9 @@ export const DELETE = withErrorHandler(
   async (request: NextRequest, context: { params: Promise<{ uuid: string }> }) => {
     const auth = await getAuthContext(request);
     if (!auth) return errors.unauthorized();
-    if (isAgent(auth)) {
-      if (!hasPermission(auth, "project:write")) {
-        return errors.forbidden("Missing permission: project:write");
-      }
-    } else if (!isUser(auth)) {
-      return errors.forbidden("Only users or permitted agents can delete project groups");
-    }
 
-    const { uuid } = await context.params;
-    const shouldDeleteProjects = request.nextUrl.searchParams.get("deleteProjects") === "true";
-    const deleted = await deleteProjectGroup(auth.companyUuid, uuid, shouldDeleteProjects);
-
-    if (!deleted) return errors.notFound("Project group");
-    return success({ deleted: true });
+    // Q4: teams cannot be disbanded/deleted in this phase. Members leave via
+    // POST /leave; the owner stays. (Route intentionally disabled for teams.)
+    return errors.forbidden("Teams cannot be disbanded in this phase");
   }
 );

@@ -156,3 +156,32 @@ export async function requireTeamMembership(
   });
   return member ? null : errors.notFound("Team");
 }
+
+// Route guard for team management (rename, member changes): owner only (R5).
+// 404 for non-members (don't reveal), 403 for members who aren't the owner.
+export async function requireTeamOwner(
+  auth: AuthContext,
+  groupUuid: string
+): Promise<ReturnType<typeof errors.notFound> | null> {
+  const viewer = await resolveViewerUserUuid(auth);
+  if (!viewer) return errors.notFound("Team");
+  const row = await prisma.teamMember.findFirst({
+    where: { companyUuid: auth.companyUuid, groupUuid, userUuid: viewer },
+  });
+  if (!row) return errors.notFound("Team");
+  if (row.role !== "owner") return errors.forbidden("Only the team owner can manage the team");
+  return null;
+}
+
+// Is the viewer a member of this team? (target-team check for project moves, R6)
+export async function isViewerTeamMember(
+  auth: AuthContext,
+  groupUuid: string
+): Promise<boolean> {
+  const viewer = await resolveViewerUserUuid(auth);
+  if (!viewer) return false;
+  const row = await prisma.teamMember.findFirst({
+    where: { companyUuid: auth.companyUuid, groupUuid, userUuid: viewer },
+  });
+  return row !== null;
+}

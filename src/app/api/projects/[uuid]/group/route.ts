@@ -6,7 +6,7 @@ import { withErrorHandler, parseBody } from "@/lib/api-handler";
 import { success, errors } from "@/lib/api-response";
 import { getAuthContext, isUser, isAgent, hasPermission } from "@/lib/auth";
 import { moveProjectToGroup } from "@/services/project-group.service";
-import { requireProjectAccess } from "@/lib/team-visibility";
+import { requireProjectAccess, isViewerTeamMember } from "@/lib/team-visibility";
 
 // PATCH /api/projects/[uuid]/group
 export const PATCH = withErrorHandler(
@@ -27,6 +27,13 @@ export const PATCH = withErrorHandler(
     if (projectDenied) return projectDenied;
 
     const body = await parseBody<{ groupUuid: string | null }>(request);
+
+    // R6: moving a project INTO a team requires membership of that target team
+    // (you can't push a project into a team you're not in). Moving to null
+    // (company-wide) is allowed for anyone who can already access the project.
+    if (body.groupUuid && !(await isViewerTeamMember(auth, body.groupUuid))) {
+      return errors.forbidden("You can only move a project into a team you belong to");
+    }
 
     const result = await moveProjectToGroup(
       auth.companyUuid,

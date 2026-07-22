@@ -13,6 +13,8 @@ import {
   projectVisibilityWhere,
   getVisibleProjectUuids,
   canAccessProject,
+  requireTeamOwner,
+  isViewerTeamMember,
 } from "@/lib/team-visibility";
 import type { AuthContext } from "@/types/auth";
 
@@ -94,5 +96,31 @@ describe("canAccessProject", () => {
   it("denies a missing project", async () => {
     mockPrisma.project.findFirst.mockResolvedValue(null);
     expect(await canAccessProject(companyUuid, "user-1", "nope")).toBe(false);
+  });
+});
+
+describe("requireTeamOwner (R5)", () => {
+  it("allows the owner (returns null)", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "owner" });
+    expect(await requireTeamOwner(userAuth, "t1")).toBeNull();
+  });
+  it("forbids a non-owner member", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "member" });
+    expect(await requireTeamOwner(userAuth, "t1")).not.toBeNull();
+  });
+  it("rejects a non-member (not-found)", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+    expect(await requireTeamOwner(userAuth, "t1")).not.toBeNull();
+  });
+});
+
+describe("isViewerTeamMember (R6 target check)", () => {
+  it("true when the viewer is a member", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "member" });
+    expect(await isViewerTeamMember(userAuth, "t1")).toBe(true);
+  });
+  it("false when not a member", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+    expect(await isViewerTeamMember(userAuth, "t1")).toBe(false);
   });
 });
