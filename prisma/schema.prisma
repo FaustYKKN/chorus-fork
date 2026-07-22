@@ -149,9 +149,32 @@ model ProjectGroup {
   companyUuid String
   name        String
   description String?  @default("")
+  // Team owner (creator / team lead). Nullable only for legacy rows created
+  // before teams existed; the migration backfills them. New groups always set it.
+  ownerUuid   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([companyUuid])
+  @@index([ownerUuid])
+}
+
+// Team membership (a ProjectGroup IS a team). Many-to-many user↔team: a user in
+// multiple teams has multiple rows. `role` is "owner" (the creator; exactly one,
+// cannot leave / be removed) or "member". Visibility (P2) keys off this table:
+// a user sees a team's projects/tasks iff a row exists here for (group, user).
+model TeamMember {
+  id          Int      @id @default(autoincrement())
+  uuid        String   @unique @default(uuid())
+  companyUuid String
+  groupUuid   String
+  userUuid    String
+  role        String   @default("member") // "owner" | "member"
+  createdAt   DateTime @default(now())
+
+  @@unique([groupUuid, userUuid])
+  @@index([groupUuid])
+  @@index([userUuid])
   @@index([companyUuid])
 }
 

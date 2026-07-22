@@ -42,6 +42,9 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     companyUuid: auth.companyUuid,
     name: body.name.trim(),
     description: body.description?.trim() || null,
+    // The creating user becomes the team owner. Agent-created groups stay
+    // ownerless (legacy company-wide grouping) — team ownership is user-centric.
+    ownerUuid: isUser(auth) ? auth.actorUuid : undefined,
   });
 
   return success(group);

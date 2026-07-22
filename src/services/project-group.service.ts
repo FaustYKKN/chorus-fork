@@ -9,6 +9,16 @@ export interface ProjectGroupCreateParams {
   companyUuid: string;
   name: string;
   description?: string | null;
+  // Creator = team owner. Required for user-created teams; the owner is also
+  // written as a TeamMember(role="owner"). Optional only so legacy/system callers
+  // that predate teams still compile (they create an ownerless, memberless group).
+  ownerUuid?: string;
+}
+
+export interface TeamMemberEntry {
+  userUuid: string;
+  role: "owner" | "member";
+  createdAt: string;
 }
 
 export interface ProjectGroupUpdateParams {
@@ -81,8 +91,22 @@ export async function createProjectGroup(
       companyUuid: params.companyUuid,
       name: params.name,
       description: params.description ?? "",
+      ownerUuid: params.ownerUuid ?? null,
     },
   });
+
+  // The creator is the team owner — record the membership row so visibility (P2)
+  // and owner-only guards have a single source of truth.
+  if (params.ownerUuid) {
+    await prisma.teamMember.create({
+      data: {
+        companyUuid: params.companyUuid,
+        groupUuid: group.uuid,
+        userUuid: params.ownerUuid,
+        role: "owner",
+      },
+    });
+  }
 
   eventBus.emitChange({
     companyUuid: params.companyUuid,
@@ -414,4 +438,157 @@ export async function getGroupDashboard(
       createdAt: a.createdAt.toISOString(),
     })),
   };
+}
+
+// ============================================================
+// Team membership (R4/R5/R5.1) — see docs/specs/team-scoping.md
+// ============================================================
+
+export type TeamMutationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "not_found" | "forbidden" | "conflict" | "invalid";
+      message: string;
+    };
+
+export async function isTeamOwner(
+  companyUuid: string,
+  groupUuid: string,
+  userUuid: string
+): Promise<boolean> {
+  const row = await prisma.teamMember.findFirst({
+    where: { companyUuid, groupUuid, userUuid, role: "owner" },
+  });
+  return row !== null;
+}
+
+export async function isTeamMember(
+  companyUuid: string,
+  groupUuid: string,
+  userUuid: string
+): Promise<boolean> {
+  const row = await prisma.teamMember.findFirst({
+    where: { companyUuid, groupUuid, userUuid },
+  });
+  return row !== null;
+}
+
+export async function listTeamMembers(
+  companyUuid: string,
+  groupUuid: string
+): Promise<TeamMemberEntry[]> {
+  const rows = await prisma.teamMember.findMany({
+    where: { companyUuid, groupUuid },
+    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+  });
+  return rows.map((r) => ({
+    userUuid: r.userUuid,
+    role: r.role as "owner" | "member",
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+// R5: only the owner adds members; the target must be a user in the same company.
+export async function addTeamMember(
+  companyUuid: string,
+  actorUuid: string,
+  groupUuid: string,
+  userUuid: string
+): Promise<TeamMutationResult> {
+  const group = await prisma.projectGroup.findFirst({
+    where: { uuid: groupUuid, companyUuid },
+  });
+  if (!group) return { ok: false, reason: "not_found", message: "Team not found" };
+  if (!(await isTeamOwner(companyUuid, groupUuid, actorUuid))) {
+    return { ok: false, reason: "forbidden", message: "Only the team owner can add members" };
+  }
+  const user = await prisma.user.findFirst({ where: { uuid: userUuid, companyUuid } });
+  if (!user) return { ok: false, reason: "invalid", message: "User is not in this company" };
+  const existing = await prisma.teamMember.findFirst({ where: { groupUuid, userUuid } });
+  if (existing) return { ok: false, reason: "conflict", message: "Already a member" };
+
+  await prisma.teamMember.create({
+    data: { companyUuid, groupUuid, userUuid, role: "member" },
+  });
+  return { ok: true };
+}
+
+// R5 + R5.1: only the owner removes members, and the owner can never be removed.
+export async function removeTeamMember(
+  companyUuid: string,
+  actorUuid: string,
+  groupUuid: string,
+  userUuid: string
+): Promise<TeamMutationResult> {
+  const group = await prisma.projectGroup.findFirst({
+    where: { uuid: groupUuid, companyUuid },
+  });
+  if (!group) return { ok: false, reason: "not_found", message: "Team not found" };
+  if (!(await isTeamOwner(companyUuid, groupUuid, actorUuid))) {
+    return { ok: false, reason: "forbidden", message: "Only the team owner can remove members" };
+  }
+  const target = await prisma.teamMember.findFirst({ where: { groupUuid, userUuid } });
+  if (!target) return { ok: false, reason: "not_found", message: "Not a member" };
+  if (target.role === "owner") {
+    return { ok: false, reason: "forbidden", message: "The team owner cannot be removed" };
+  }
+  await prisma.teamMember.deleteMany({ where: { groupUuid, userUuid } });
+  return { ok: true };
+}
+
+// R5.1: a member may leave; the owner cannot (teams are non-disbandable this phase).
+export async function leaveTeam(
+  companyUuid: string,
+  actorUuid: string,
+  groupUuid: string
+): Promise<TeamMutationResult> {
+  const membership = await prisma.teamMember.findFirst({
+    where: { companyUuid, groupUuid, userUuid: actorUuid },
+  });
+  if (!membership) {
+    return { ok: false, reason: "not_found", message: "Not a member of this team" };
+  }
+  if (membership.role === "owner") {
+    return {
+      ok: false,
+      reason: "forbidden",
+      message: "The team owner cannot leave; teams cannot be disbanded in this phase",
+    };
+  }
+  await prisma.teamMember.deleteMany({ where: { groupUuid, userUuid: actorUuid } });
+  return { ok: true };
+}
+
+// The teams a user belongs to (owner or member). Basis for the "My Teams" view.
+export async function listMyTeams(
+  companyUuid: string,
+  userUuid: string
+): Promise<ProjectGroupResponse[]> {
+  const memberships = await prisma.teamMember.findMany({
+    where: { companyUuid, userUuid },
+    select: { groupUuid: true },
+  });
+  const groupUuids = memberships.map((m) => m.groupUuid);
+  if (groupUuids.length === 0) return [];
+
+  const groups = await prisma.projectGroup.findMany({
+    where: { companyUuid, uuid: { in: groupUuids } },
+    orderBy: { createdAt: "asc" },
+  });
+  const projectCounts = await prisma.project.groupBy({
+    by: ["groupUuid"],
+    where: { companyUuid, groupUuid: { in: groupUuids } },
+    _count: { _all: true },
+  });
+  const countMap = new Map(projectCounts.map((pc) => [pc.groupUuid, pc._count._all]));
+
+  return groups.map((g) => ({
+    uuid: g.uuid,
+    name: g.name,
+    description: g.description,
+    projectCount: countMap.get(g.uuid) ?? 0,
+    createdAt: g.createdAt.toISOString(),
+    updatedAt: g.updatedAt.toISOString(),
+  }));
 }

@@ -31,6 +31,15 @@ const mockPrisma = vi.hoisted(() => ({
   activity: {
     findMany: vi.fn(),
   },
+  teamMember: {
+    create: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    deleteMany: vi.fn(),
+  },
+  user: {
+    findFirst: vi.fn(),
+  },
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 
@@ -47,6 +56,10 @@ import {
   listProjectGroups,
   moveProjectToGroup,
   getGroupDashboard,
+  addTeamMember,
+  removeTeamMember,
+  leaveTeam,
+  isTeamOwner,
 } from "@/services/project-group.service";
 
 // ===== Helpers =====
@@ -105,6 +118,7 @@ describe("createProjectGroup", () => {
         companyUuid,
         name: "Test Group",
         description: "A test group",
+        ownerUuid: null,
       },
     });
   });
@@ -124,6 +138,7 @@ describe("createProjectGroup", () => {
         companyUuid,
         name: "Test Group",
         description: "",
+        ownerUuid: null,
       },
     });
   });
@@ -142,6 +157,7 @@ describe("createProjectGroup", () => {
         companyUuid,
         name: "Test Group",
         description: "",
+        ownerUuid: null,
       },
     });
   });
@@ -660,5 +676,123 @@ describe("getGroupDashboard", () => {
     const result = await getGroupDashboard(companyUuid, groupUuid);
 
     expect(result!.recentActivity[0].projectName).toBe("Unknown");
+  });
+});
+
+// ===== Teams: owner on create + membership guards =====
+const ownerUuid = "user-owner-0000-0000-000000000001";
+const memberUuid = "user-member-0000-0000-00000000002";
+
+describe("createProjectGroup with owner", () => {
+  it("records the creator as an owner TeamMember and stamps ownerUuid", async () => {
+    mockPrisma.projectGroup.create.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+
+    await createProjectGroup({ companyUuid, name: "Team A", ownerUuid });
+
+    expect(mockPrisma.projectGroup.create).toHaveBeenCalledWith({
+      data: { companyUuid, name: "Team A", description: "", ownerUuid },
+    });
+    expect(mockPrisma.teamMember.create).toHaveBeenCalledWith({
+      data: { companyUuid, groupUuid, userUuid: ownerUuid, role: "owner" },
+    });
+  });
+
+  it("does not create a membership when ownerless (legacy/agent path)", async () => {
+    mockPrisma.projectGroup.create.mockResolvedValue(makeProjectGroup());
+    await createProjectGroup({ companyUuid, name: "Team A" });
+    expect(mockPrisma.teamMember.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("addTeamMember", () => {
+  it("lets the owner add a company user", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst
+      .mockResolvedValueOnce({ role: "owner" }) // isTeamOwner
+      .mockResolvedValueOnce(null); // not already a member
+    mockPrisma.user.findFirst.mockResolvedValue({ uuid: memberUuid, companyUuid });
+
+    const r = await addTeamMember(companyUuid, ownerUuid, groupUuid, memberUuid);
+
+    expect(r.ok).toBe(true);
+    expect(mockPrisma.teamMember.create).toHaveBeenCalledWith({
+      data: { companyUuid, groupUuid, userUuid: memberUuid, role: "member" },
+    });
+  });
+
+  it("rejects a non-owner actor (403)", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst.mockResolvedValueOnce(null); // isTeamOwner → false
+
+    const r = await addTeamMember(companyUuid, memberUuid, groupUuid, memberUuid);
+
+    expect(r).toEqual({ ok: false, reason: "forbidden", message: expect.any(String) });
+    expect(mockPrisma.teamMember.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a target that is not a company user", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst.mockResolvedValueOnce({ role: "owner" });
+    mockPrisma.user.findFirst.mockResolvedValue(null);
+
+    const r = await addTeamMember(companyUuid, ownerUuid, groupUuid, "outsider");
+    expect(r).toMatchObject({ ok: false, reason: "invalid" });
+  });
+
+  it("rejects an already-existing member (conflict)", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst
+      .mockResolvedValueOnce({ role: "owner" })
+      .mockResolvedValueOnce({ role: "member" }); // already a member
+    mockPrisma.user.findFirst.mockResolvedValue({ uuid: memberUuid, companyUuid });
+
+    const r = await addTeamMember(companyUuid, ownerUuid, groupUuid, memberUuid);
+    expect(r).toMatchObject({ ok: false, reason: "conflict" });
+  });
+});
+
+describe("removeTeamMember", () => {
+  it("owner removes a member", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst
+      .mockResolvedValueOnce({ role: "owner" }) // isTeamOwner
+      .mockResolvedValueOnce({ role: "member" }); // target
+    mockPrisma.teamMember.deleteMany.mockResolvedValue({ count: 1 });
+
+    const r = await removeTeamMember(companyUuid, ownerUuid, groupUuid, memberUuid);
+    expect(r.ok).toBe(true);
+    expect(mockPrisma.teamMember.deleteMany).toHaveBeenCalled();
+  });
+
+  it("refuses to remove the owner", async () => {
+    mockPrisma.projectGroup.findFirst.mockResolvedValue(makeProjectGroup({ ownerUuid }));
+    mockPrisma.teamMember.findFirst
+      .mockResolvedValueOnce({ role: "owner" }) // isTeamOwner
+      .mockResolvedValueOnce({ role: "owner" }); // target is the owner
+    const r = await removeTeamMember(companyUuid, ownerUuid, groupUuid, ownerUuid);
+    expect(r).toMatchObject({ ok: false, reason: "forbidden" });
+    expect(mockPrisma.teamMember.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("leaveTeam", () => {
+  it("a member can leave", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "member" });
+    mockPrisma.teamMember.deleteMany.mockResolvedValue({ count: 1 });
+    const r = await leaveTeam(companyUuid, memberUuid, groupUuid);
+    expect(r.ok).toBe(true);
+  });
+
+  it("the owner cannot leave", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue({ role: "owner" });
+    const r = await leaveTeam(companyUuid, ownerUuid, groupUuid);
+    expect(r).toMatchObject({ ok: false, reason: "forbidden" });
+    expect(mockPrisma.teamMember.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("non-member gets not_found", async () => {
+    mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+    const r = await leaveTeam(companyUuid, "stranger", groupUuid);
+    expect(r).toMatchObject({ ok: false, reason: "not_found" });
   });
 });
