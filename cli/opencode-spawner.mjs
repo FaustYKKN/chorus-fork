@@ -35,6 +35,7 @@ import { statSync } from "node:fs";
 import { win32 as pathWin32, posix as pathPosix } from "node:path";
 import { parseNdjsonChunk } from "./claude-spawner.mjs";
 import { resolveSpawnCommand } from "./codex-spawner.mjs";
+import { killProcessTree } from "./process-killer.mjs";
 import {
   getSessionId as defaultGetSessionId,
   setSessionId as defaultSetSessionId,
@@ -179,8 +180,11 @@ export class OpencodeSpawner {
     // `maxMs`: absolute per-wake wall-clock ceiling. 0 disables either gate.
     // `checkIntervalMs`: how often the monitor polls (also the min kill latency).
     this.idleTimeoutMs = opts.idleTimeoutMs ?? envMs("CHORUS_WAKE_IDLE_TIMEOUT_MS", 12 * 60 * 1000);
-    this.maxMs = opts.maxMs ?? envMs("CHORUS_WAKE_MAX_MS", 40 * 60 * 1000);
+    this.maxMs = opts.maxMs ?? envMs("CHORUS_WAKE_MAX_MS", 90 * 60 * 1000);
     this.checkIntervalMs = opts.checkIntervalMs ?? 15 * 1000;
+    // Cross-platform process-TREE killer for the runaway guard (injectable for
+    // tests; defaults to the shared killer the interrupt path uses).
+    this.killer = opts.killer ?? killProcessTree;
     this.now = opts.now ?? (() => Date.now());
   }
 
@@ -279,14 +283,24 @@ export class OpencodeSpawner {
         const over = this.maxMs > 0 && now - wakeStart > this.maxMs;
         if (idle || over) {
           timedOut = true;
+          // Fire ONCE: stop the monitor before killing so it can't re-log +
+          // re-kill every checkInterval while the tree tears down (that was the
+          // "over Xs budget" spam). child.on("close") clears it again — a
+          // harmless double-clear.
+          clearInterval(monitor);
           this.logger.warn(
             `[Chorus] killing opencode wake — ${idle ? `no output for ${Math.round((now - lastOutput) / 1000)}s (idle)` : `over ${Math.round((now - wakeStart) / 1000)}s budget`}`,
           );
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            /* already gone */
-          }
+          // Kill the whole PROCESS GROUP/TREE, not just the group leader. opencode
+          // runs detached and forks child shells; child.kill() reaps only the
+          // leader, so a grandchild holding the stdout pipe keeps `close` from
+          // firing — the wake never reports interrupted, the task stays
+          // in_progress and its lane (and the queue behind it) wedges. Reuse the
+          // cross-platform tree killer the interrupt path uses (POSIX negative-pid
+          // group signal / Windows taskkill /T /F).
+          Promise.resolve(
+            this.killer(child, { platform: this.platform, logger: this.logger }),
+          ).catch((err) => this.logger.warn(`[Chorus] runaway killProcessTree rejected: ${err}`));
         }
       }, this.checkIntervalMs);
       if (typeof monitor.unref === "function") monitor.unref();

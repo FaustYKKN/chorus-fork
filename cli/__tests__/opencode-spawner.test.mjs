@@ -326,7 +326,6 @@ describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
 
   it("kills a SILENT wake after idleTimeoutMs and reports timedOut", async () => {
     const child = makeFakeChild();
-    child.kill = () => child.emit("close", null); // SIGKILL → close(null)
     const spawner = new OpencodeSpawner({
       opencodePath: "/usr/bin/opencode",
       spawnImpl: () => child,
@@ -335,6 +334,7 @@ describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
       idleTimeoutMs: 50, // silent >50ms → killed
       maxMs: 0,
       checkIntervalMs: 10,
+      killer: () => child.emit("close", null), // tree-kill → close(null)
     });
     const result = await spawner.wake({ prompt: "hi", sessionId: "s1", isNew: true, cwd: "/tmp" });
     expect(result.timedOut).toBe(true);
@@ -343,10 +343,6 @@ describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
   it("does NOT kill a wake that keeps producing output; clean exit → timedOut false", async () => {
     const child = makeFakeChild();
     let killed = false;
-    child.kill = () => {
-      killed = true;
-      child.emit("close", null);
-    };
     const spawner = new OpencodeSpawner({
       opencodePath: "/usr/bin/opencode",
       spawnImpl: () => child,
@@ -355,6 +351,10 @@ describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
       idleTimeoutMs: 100,
       maxMs: 0,
       checkIntervalMs: 20,
+      killer: () => {
+        killed = true;
+        child.emit("close", null);
+      },
     });
     const wakeP = spawner.wake({ prompt: "hi", sessionId: "s1", isNew: true, cwd: "/tmp" });
     // Output every 30ms (< 100ms idle) keeps it alive, then a clean close.
@@ -367,5 +367,30 @@ describe("OpencodeSpawner — R5 runaway guard (idle + ceiling)", () => {
     expect(killed).toBe(false);
     expect(result.timedOut).toBe(false);
     expect(result.exitCode).toBe(0);
+  });
+
+  it("kills a wake past maxMs (ceiling) via the tree killer EXACTLY ONCE (no spam)", async () => {
+    const child = makeFakeChild();
+    let killCount = 0;
+    const spawner = new OpencodeSpawner({
+      opencodePath: "/usr/bin/opencode",
+      spawnImpl: () => child,
+      platform: "linux",
+      logger: silent,
+      idleTimeoutMs: 0, // idle gate off — only the ceiling should fire
+      maxMs: 30, // ceiling 30ms
+      checkIntervalMs: 10, // polls every 10ms: without clearInterval it would re-fire
+      // Simulate a STUCK tree: the killer is invoked but the child doesn't close
+      // yet, so a monitor that wasn't cleared would re-fire on later ticks.
+      killer: () => {
+        killCount += 1;
+      },
+    });
+    const wakeP = spawner.wake({ prompt: "hi", sessionId: "s1", isNew: true, cwd: "/tmp" });
+    await new Promise((r) => setTimeout(r, 60)); // several check intervals elapse
+    child.emit("close", null); // tree finally tears down
+    const result = await wakeP;
+    expect(result.timedOut).toBe(true);
+    expect(killCount).toBe(1); // fired once — monitor cleared on first over-budget hit
   });
 });
