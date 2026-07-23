@@ -12,10 +12,12 @@ vi.mock("@/services/daemon-connection.service", () => ({
 const mockResolveOrCreateSession = vi.hoisted(() => vi.fn());
 const mockCreatePendingTurn = vi.hoisted(() => vi.fn());
 const mockResolveDirectIdeaUuid = vi.hoisted(() => vi.fn());
+const mockResolveEntityTitle = vi.hoisted(() => vi.fn());
 vi.mock("@/services/daemon-session.service", () => ({
   resolveOrCreateSession: mockResolveOrCreateSession,
   createPendingTurn: mockCreatePendingTurn,
   resolveDirectIdeaUuid: mockResolveDirectIdeaUuid,
+  resolveEntityTitle: mockResolveEntityTitle,
 }));
 
 // The assignment pin is now INSTANCE-based (T11): the bridge reads the wake's Task row
@@ -208,6 +210,7 @@ beforeEach(() => {
   // resolves, turn created.
   mockListConnectionsForAgent.mockResolvedValue([onlineConn()]);
   mockResolveDirectIdeaUuid.mockResolvedValue(ideaUuid);
+  mockResolveEntityTitle.mockResolvedValue(null);
   mockResolveOrCreateSession.mockResolvedValue(sessionView());
   mockCreatePendingTurn.mockImplementation(async (p: { trigger: string; promptText?: string | null }) =>
     turnView({ trigger: p.trigger, promptText: p.promptText ?? null }),

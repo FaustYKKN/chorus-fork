@@ -318,6 +318,11 @@ export async function resolveOrCreateSession(params: {
   sessionId: string;
   directIdeaUuid?: string | null;
   originConnectionUuid: string;
+  // Human-readable conversation title (write-once on create). Used to name an
+  // ad-hoc conversation by the resource it works on (e.g. a task title) instead of
+  // a session-uuid fallback. Idea-anchored sessions leave this null (the client
+  // names them by their idea).
+  title?: string | null;
 }): Promise<SessionView> {
   const row = await prisma.daemonSession.upsert({
     where: {
@@ -332,15 +337,50 @@ export async function resolveOrCreateSession(params: {
       sessionId: params.sessionId,
       directIdeaUuid: params.directIdeaUuid ?? null,
       originConnectionUuid: params.originConnectionUuid,
+      title: params.title ?? null,
       status: "active",
     },
     update: {
-      // Re-affirm companyUuid from the authenticated context. originConnectionUuid
-      // and directIdeaUuid are write-once — intentionally NOT updated here.
+      // Re-affirm companyUuid from the authenticated context. originConnectionUuid,
+      // directIdeaUuid and title are write-once — intentionally NOT updated here.
       companyUuid: params.companyUuid,
     },
   });
   return toSessionView(row);
+}
+
+/**
+ * The display title of a wake's target entity (task/idea/proposal/document), used
+ * to name an ad-hoc conversation by what it works on. Returns null for a
+ * titleless/non-resource target (e.g. a comment) — the caller then leaves the
+ * session title unset and the client falls back to its uuid label. companyUuid-
+ * scoped; a query failure propagates.
+ */
+export async function resolveEntityTitle(
+  companyUuid: string,
+  entityType: string,
+  entityUuid: string,
+): Promise<string | null> {
+  switch (entityType) {
+    case "task": {
+      const t = await prisma.task.findFirst({ where: { uuid: entityUuid, companyUuid }, select: { title: true } });
+      return t?.title ?? null;
+    }
+    case "idea": {
+      const i = await prisma.idea.findFirst({ where: { uuid: entityUuid, companyUuid }, select: { title: true } });
+      return i?.title ?? null;
+    }
+    case "proposal": {
+      const p = await prisma.proposal.findFirst({ where: { uuid: entityUuid, companyUuid }, select: { title: true } });
+      return p?.title ?? null;
+    }
+    case "document": {
+      const d = await prisma.document.findFirst({ where: { uuid: entityUuid, companyUuid }, select: { title: true } });
+      return d?.title ?? null;
+    }
+    default:
+      return null;
+  }
 }
 
 /**

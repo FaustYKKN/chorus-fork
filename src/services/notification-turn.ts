@@ -55,6 +55,7 @@ import {
   resolveOrCreateSession,
   createPendingTurn,
   resolveDirectIdeaUuid,
+  resolveEntityTitle,
   type TurnTrigger,
   type TurnView,
 } from "@/services/daemon-session.service";
@@ -750,12 +751,22 @@ export async function createTurnAndResolveTarget(
     // then append the pending turn. For human_instruction the canonical free-text body
     // lives on the turn's promptText; every autonomous trigger has promptText = null (the
     // daemon rebuilds the autonomous prompt from notification context).
+    // Name an AD-HOC conversation (no idea anchor) by the resource it works on —
+    // e.g. a task's title — so the sidebar shows "3.2.6 …" instead of a session-uuid
+    // fallback ("对话 aa606d09"). Idea-anchored sessions leave title null; the client
+    // already names them by their idea. Write-once on create in resolveOrCreateSession.
+    const sessionTitle =
+      sessionDirectIdeaUuid === null
+        ? await resolveEntityTitle(ctx.companyUuid, ctx.entityType, ctx.entityUuid)
+        : null;
+
     const session = await resolveOrCreateSession({
       companyUuid: ctx.companyUuid,
       agentUuid: ctx.recipientUuid,
       sessionId,
       directIdeaUuid: sessionDirectIdeaUuid,
       originConnectionUuid: origin.uuid,
+      title: sessionTitle,
     });
 
     const promptText =
