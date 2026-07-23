@@ -865,6 +865,7 @@
     "statusInactive": "Inactive",
     "statusClosed": "Closed",
     "activeWorkers": "Active Workers",
+    "viewConversation": "View process",
     "workerCount": "{count} worker(s)",
     "checkedInSince": "Checked in {time}",
     "lastActive": "Last active {time}",

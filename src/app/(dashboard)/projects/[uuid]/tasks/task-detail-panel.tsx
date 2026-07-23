@@ -7,6 +7,7 @@ import { X, Pencil, CheckCircle, Play, Eye, Bot, User, Send, FileText, Loader2, 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useAgentPresenceOptional } from "@/contexts/agent-presence-context";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -271,6 +272,9 @@ export function TaskDetailPanel({
 
   // Active workers (sessions)
   const [activeWorkers, setActiveWorkers] = useState<TaskSessionInfo[]>([]);
+  // Agent-presence context: lets the "view conversation" action open the chat
+  // focused on the assignee agent's (host, cwd) conversation for this task.
+  const presence = useAgentPresenceOptional();
 
   // Pending dependencies for create mode (stored locally until task is created)
   const [pendingDeps, setPendingDeps] = useState<DependencyTask[]>([]);
@@ -844,6 +848,29 @@ export function TaskDetailPanel({
                             </div>
                           )}
                         </div>
+                        {/* Jump straight to this task's conversation transcript (the
+                            agent's turn-by-turn work) instead of hunting in the
+                            bottom-left connections modal. */}
+                        {isAgentAssignee(task.assignee) && presence && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="ml-auto shrink-0 gap-1.5 rounded-lg border-[#E5E2DC] bg-white text-[12px] font-medium text-[#2C2C2C] hover:border-[#C67A52] hover:bg-white"
+                            onClick={() => {
+                              const a = task.assignee;
+                              if (!a) return;
+                              presence.openChatForAgent(
+                                a.instance?.agentUuid ?? a.uuid,
+                                a.instance
+                                  ? { host: a.instance.host, cwd: a.instance.cwd }
+                                  : undefined,
+                              );
+                            }}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            {t("sessions.viewConversation")}
+                          </Button>
+                        )}
                       </>
                     ) : (
                       <span className="text-sm text-[#9A9A9A]">{t("common.unassigned")}</span>

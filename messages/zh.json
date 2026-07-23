@@ -866,6 +866,7 @@
     "statusInactive": "不活跃",
     "statusClosed": "已关闭",
     "activeWorkers": "活跃工作者",
+    "viewConversation": "看过程",
     "workerCount": "{count} 个工作者",
     "checkedInSince": "签入于 {time}",
     "lastActive": "最后活跃 {time}",
