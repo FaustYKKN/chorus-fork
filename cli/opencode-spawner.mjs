@@ -218,7 +218,7 @@ export class OpencodeSpawner {
       permissionMode: this.permissionMode,
       model: process.env.CHORUS_OPENCODE_MODEL || null,
     });
-    const { command, argv } = resolveSpawnCommand(opencodePath, args, this.platform);
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand(opencodePath, args, this.platform);
 
     // POSIX: detached process group so the interrupt path can group-kill the tree
     // (opencode forks child shells for tools). Windows uses taskkill /T.
@@ -254,6 +254,8 @@ export class OpencodeSpawner {
           shell: false,
           detached,
           windowsHide: true,
+          // Only truthy on the Windows .cmd/.bat route (hand-quoted above).
+          windowsVerbatimArguments,
         });
       } catch (err) {
         this.logger.error(`[Chorus] failed to spawn opencode: ${err}`);

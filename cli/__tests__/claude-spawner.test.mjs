@@ -461,31 +461,48 @@ describe("mcp-config", () => {
 describe("resolveSpawnCommand (Windows .cmd routing)", () => {
   const ARGS = ["-p", "--output-format", "stream-json"];
 
-  it("routes a Windows .cmd shim through cmd.exe /d /s /c", () => {
-    const { command, argv } = resolveSpawnCommand("C:\\npm\\claude.cmd", ARGS, "win32", {
+  it("routes a Windows .cmd shim through cmd.exe /d /s /c with the cmdline outer-quoted (verbatim)", () => {
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand("C:\\npm\\claude.cmd", ARGS, "win32", {
       ComSpec: "C:\\Windows\\System32\\cmd.exe",
     });
     expect(command).toBe("C:\\Windows\\System32\\cmd.exe");
-    expect(argv).toEqual(["/d", "/s", "/c", "C:\\npm\\claude.cmd", ...ARGS]);
+    // No space in the path → no inner quote, but the whole line is still wrapped
+    // in an outer pair that /s strips, and passed verbatim (Node must not requote).
+    expect(argv).toEqual(["/d", "/s", "/c", `"C:\\npm\\claude.cmd ${ARGS.join(" ")}"`]);
+    expect(windowsVerbatimArguments).toBe(true);
+  });
+
+  it("keeps a SPACED .cmd path inner-quoted so cmd.exe /s does not split it (the space-in-path fix)", () => {
+    const spaced = "C:\\Program Files\\claude\\claude.cmd";
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand(spaced, ARGS, "win32", {
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    });
+    expect(command).toBe("C:\\Windows\\System32\\cmd.exe");
+    // Outer pair (stripped by /s) wraps an INNER quoted path (survives), so cmd
+    // runs the shim at its spaced path instead of trying to exec "C:\\Program".
+    expect(argv).toEqual(["/d", "/s", "/c", `""${spaced}" ${ARGS.join(" ")}"`]);
+    expect(windowsVerbatimArguments).toBe(true);
   });
 
   it("routes a Windows .bat shim through cmd.exe and falls back to cmd.exe when ComSpec unset", () => {
     const { command, argv } = resolveSpawnCommand("C:\\x\\claude.bat", ARGS, "win32", {});
     expect(command).toBe("cmd.exe");
     expect(argv[0]).toBe("/d");
-    expect(argv).toContain("C:\\x\\claude.bat");
+    expect(argv[3]).toContain("C:\\x\\claude.bat");
   });
 
-  it("spawns a real .exe directly on Windows (no cmd.exe wrapper)", () => {
-    const { command, argv } = resolveSpawnCommand("C:\\x\\claude.exe", ARGS, "win32", {});
+  it("spawns a real .exe directly on Windows (no cmd.exe wrapper, no verbatim flag)", () => {
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand("C:\\x\\claude.exe", ARGS, "win32", {});
     expect(command).toBe("C:\\x\\claude.exe");
     expect(argv).toEqual(ARGS);
+    expect(windowsVerbatimArguments).toBeUndefined();
   });
 
   it("spawns the path directly on POSIX", () => {
-    const { command, argv } = resolveSpawnCommand("/usr/bin/claude", ARGS, "linux", {});
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand("/usr/bin/claude", ARGS, "linux", {});
     expect(command).toBe("/usr/bin/claude");
     expect(argv).toEqual(ARGS);
+    expect(windowsVerbatimArguments).toBeUndefined();
   });
 });
 

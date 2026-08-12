@@ -183,27 +183,52 @@ export function buildArgs({ sessionId, isNew, mcpConfigPath, permissionMode = "c
 }
 
 /**
+ * Quote one token for a cmd.exe command line: wrap in double quotes when it holds
+ * whitespace or a quote (an unquoted space would split the token), doubling any
+ * embedded quote. Our tokens are paths + flags + ids — no cmd metacharacters
+ * (&|<>^) — so quote-on-space is sufficient; a bare token is left as-is.
+ * @param {string} s
+ * @returns {string}
+ */
+function quoteWinArg(s) {
+  if (s === "") return '""';
+  if (!/[\s"]/.test(s)) return s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+/**
  * Resolve the actual command + argv to spawn, given the resolved claude path
  * and the headless args. On Windows a `.cmd`/`.bat` shim is NOT a PE executable,
  * so `CreateProcess` (i.e. spawn with shell:false) cannot run it directly — it
- * must be invoked through `cmd.exe /d /s /c <path> ...args`. We keep shell:false
- * and pass argv as an array (no string concatenation), so there is no shell
- * word-splitting / injection surface. On POSIX, and for a real `.exe`, we spawn
- * the path directly.
+ * must be invoked through `cmd.exe /d /s /c <cmdline>`. On POSIX, and for a real
+ * `.exe`, we spawn the path directly.
+ *
+ * The `.cmd` path is subtle when the shim's path contains a SPACE (e.g. an
+ * npm-global install under `C:\Program Files\` or a profile like
+ * `C:\Users\First Last\`). `/s` strips the FIRST and LAST quote of the string
+ * after `/c` and runs the rest verbatim. If we passed the path + args as separate
+ * argv (Node quotes each spaced element), `/s` would tear the quotes off the
+ * spaced path and cmd would split it on the space — the wake never launches.
+ * Fix: hand-build ONE command line with each token quoted, wrap the WHOLE line in
+ * an OUTER quote pair, and return `windowsVerbatimArguments` so Node passes it
+ * through untouched. `/s` then strips only the outer pair; the inner path-quote
+ * survives and cmd runs the shim correctly. (No space → still correct: `/s`
+ * removes the outer pair and the un-spaced path needs no inner quote.)
  *
  * @param {string} claudePath
  * @param {string[]} args
  * @param {NodeJS.Platform} [platform]
  * @param {NodeJS.ProcessEnv} [env]
- * @returns {{ command: string, argv: string[] }}
+ * @returns {{ command: string, argv: string[], windowsVerbatimArguments?: boolean }}
  */
 export function resolveSpawnCommand(claudePath, args, platform = process.platform, env = process.env) {
   const isWin = platform === "win32";
   const lower = claudePath.toLowerCase();
   if (isWin && (lower.endsWith(".cmd") || lower.endsWith(".bat"))) {
     const comspec = env.ComSpec || env.COMSPEC || "cmd.exe";
-    // /d skip AutoRun, /s treat everything after /c literally, /c run then exit.
-    return { command: comspec, argv: ["/d", "/s", "/c", claudePath, ...args] };
+    // /d skip AutoRun, /s take the outer-quoted remainder literally, /c run+exit.
+    const line = [claudePath, ...args].map(quoteWinArg).join(" ");
+    return { command: comspec, argv: ["/d", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true };
   }
   return { command: claudePath, argv: args };
 }
@@ -302,7 +327,7 @@ export class ClaudeSpawner {
     // On Windows, a .cmd/.bat shim must be run via cmd.exe /c (CreateProcess
     // can't exec a script directly). resolveSpawnCommand keeps shell:false and
     // passes argv as an array — no shell injection surface either way.
-    const { command, argv } = resolveSpawnCommand(claudePath, args);
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand(claudePath, args);
 
     // POSIX: spawn `detached: true` so the child becomes a PROCESS GROUP LEADER
     // (its pgid === its pid). The interrupt path then signals the whole group via
@@ -335,6 +360,9 @@ export class ClaudeSpawner {
           shell: false,
           detached,
           windowsHide: true,
+          // Set only for the Windows .cmd/.bat route (undefined elsewhere): the
+          // command line was hand-quoted above, so Node must not re-quote it.
+          windowsVerbatimArguments,
         });
       } catch (err) {
         this.logger.error(`[Chorus] failed to spawn claude: ${err}`);

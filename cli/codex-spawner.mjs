@@ -135,19 +135,41 @@ export function resolveCodexPath(deps = {}) {
 }
 
 /**
+ * Quote one token for a cmd.exe command line: wrap in double quotes when it holds
+ * whitespace or a quote (an unquoted space would split the token), doubling any
+ * embedded quote. Our tokens are paths + flags + ids — no cmd metacharacters
+ * (&|<>^) — so quote-on-space is sufficient; a bare token is left as-is.
+ * @param {string} s
+ * @returns {string}
+ */
+function quoteWinArg(s) {
+  if (s === "") return '""';
+  if (!/[\s"]/.test(s)) return s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
+/**
  * Resolve the actual command + argv to spawn. On Windows a `.cmd`/`.bat` shim is
- * not a PE executable, so it must run via `cmd.exe /d /s /c <path> ...args`; we
- * keep shell:false and pass argv as an array (no shell word-splitting/injection).
+ * not a PE executable, so it must run via `cmd.exe /d /s /c <cmdline>`; we keep
+ * shell:false. When the shim's path contains a SPACE (npm-global install under
+ * `C:\Program Files\` or a `C:\Users\First Last\` profile), passing the path +
+ * args as separate argv breaks: `/s` strips the FIRST and LAST quote after `/c`,
+ * so Node's per-arg quoting on the spaced path gets torn off and cmd splits it on
+ * the space — the wake never launches. Fix: hand-build one quoted command line,
+ * wrap the WHOLE thing in an OUTER quote pair, and return
+ * `windowsVerbatimArguments` so Node passes it verbatim; `/s` then strips only the
+ * outer pair and the inner path-quote survives. (No space → still correct.)
  * @param {string} codexPath @param {string[]} args
  * @param {NodeJS.Platform} [platform] @param {NodeJS.ProcessEnv} [env]
- * @returns {{ command: string, argv: string[] }}
+ * @returns {{ command: string, argv: string[], windowsVerbatimArguments?: boolean }}
  */
 export function resolveSpawnCommand(codexPath, args, platform = process.platform, env = process.env) {
   const isWin = platform === "win32";
   const lower = codexPath.toLowerCase();
   if (isWin && (lower.endsWith(".cmd") || lower.endsWith(".bat"))) {
     const comspec = env.ComSpec || env.COMSPEC || "cmd.exe";
-    return { command: comspec, argv: ["/d", "/s", "/c", codexPath, ...args] };
+    const line = [codexPath, ...args].map(quoteWinArg).join(" ");
+    return { command: comspec, argv: ["/d", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true };
   }
   return { command: codexPath, argv: args };
 }
@@ -207,7 +229,7 @@ export class CodexSpawner {
     }
 
     const args = buildCodexArgs({ isNew, threadId: knownThreadId, permissionMode: this.permissionMode });
-    const { command, argv } = resolveSpawnCommand(codexPath, args, this.platform);
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand(codexPath, args, this.platform);
 
     // POSIX: detached process group so the interrupt path can group-kill the tree
     // (codex exec forks child shells for tools). Windows uses taskkill /T. stdio
@@ -230,6 +252,8 @@ export class CodexSpawner {
           shell: false,
           detached,
           windowsHide: true,
+          // Only truthy on the Windows .cmd/.bat route (hand-quoted above).
+          windowsVerbatimArguments,
         });
       } catch (err) {
         this.logger.error(`[Chorus] failed to spawn codex: ${err}`);

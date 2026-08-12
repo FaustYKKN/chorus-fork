@@ -14,6 +14,7 @@ import {
   buildCodexArgs,
   sandboxFlags,
   resolveCodexPath,
+  resolveSpawnCommand,
   extractThreadId,
 } from "../codex-spawner.mjs";
 
@@ -142,6 +143,30 @@ describe("resolveCodexPath", () => {
 
   it("returns null when nothing resolves", () => {
     expect(resolveCodexPath({ env: { PATH: "/x" }, platform: "linux", isFile: () => false })).toBeNull();
+  });
+});
+
+describe("resolveSpawnCommand (Windows .cmd routing — shared by opencode)", () => {
+  const ARGS = ["exec", "--json"];
+
+  it("outer-quotes a SPACED .cmd path so cmd.exe /s cannot split it", () => {
+    const spaced = "C:\\Program Files\\codex\\codex.cmd";
+    const { command, argv, windowsVerbatimArguments } = resolveSpawnCommand(spaced, ARGS, "win32", {
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    });
+    expect(command).toBe("C:\\Windows\\System32\\cmd.exe");
+    expect(argv).toEqual(["/d", "/s", "/c", `""${spaced}" ${ARGS.join(" ")}"`]);
+    expect(windowsVerbatimArguments).toBe(true);
+  });
+
+  it("spawns a real .exe / POSIX path directly (no wrapper, no verbatim flag)", () => {
+    const win = resolveSpawnCommand("C:\\x\\codex.exe", ARGS, "win32", {});
+    expect(win.command).toBe("C:\\x\\codex.exe");
+    expect(win.argv).toEqual(ARGS);
+    expect(win.windowsVerbatimArguments).toBeUndefined();
+    const posix = resolveSpawnCommand("/usr/bin/codex", ARGS, "linux", {});
+    expect(posix.command).toBe("/usr/bin/codex");
+    expect(posix.argv).toEqual(ARGS);
   });
 });
 
