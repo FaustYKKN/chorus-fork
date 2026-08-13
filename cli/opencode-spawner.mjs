@@ -179,7 +179,7 @@ export class OpencodeSpawner {
     // LLM 429/500 hang or a memory thrash — caught in minutes, not the ceiling).
     // `maxMs`: absolute per-wake wall-clock ceiling. 0 disables either gate.
     // `checkIntervalMs`: how often the monitor polls (also the min kill latency).
-    this.idleTimeoutMs = opts.idleTimeoutMs ?? envMs("CHORUS_WAKE_IDLE_TIMEOUT_MS", 30 * 60 * 1000);
+    this.idleTimeoutMs = opts.idleTimeoutMs ?? envMs("CHORUS_WAKE_IDLE_TIMEOUT_MS", 50 * 60 * 1000);
     this.maxMs = opts.maxMs ?? envMs("CHORUS_WAKE_MAX_MS", 120 * 60 * 1000);
     this.checkIntervalMs = opts.checkIntervalMs ?? 15 * 1000;
     // Cross-platform process-TREE killer for the runaway guard (injectable for
