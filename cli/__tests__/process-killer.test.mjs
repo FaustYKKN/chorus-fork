@@ -141,8 +141,8 @@ describe("killProcessTree — POSIX two-stage group kill", () => {
   });
 });
 
-describe("killProcessTree — Windows taskkill escalation", () => {
-  it("best-effort child.kill('SIGINT') then escalates via taskkill /PID <pid> /T /F", async () => {
+describe("killProcessTree — Windows tree kill", () => {
+  it("goes STRAIGHT to taskkill /PID <pid> /T /F (no fake-graceful direct child.kill)", async () => {
     const child = fakeChild(31337);
     child.kill = vi.fn(() => true);
     const spawned = { on: vi.fn() };
@@ -153,32 +153,37 @@ describe("killProcessTree — Windows taskkill escalation", () => {
       logger: silent,
       spawnImpl,
       sigintTimeoutMs: 10,
-      waitForExit: vi.fn(async () => false), // never exits → escalate
     });
 
-    // Graceful: direct child.kill (no group signal exists on Windows).
-    expect(child.kill).toHaveBeenCalledWith("SIGINT");
-    // Forceful: taskkill /PID <pid> /T /F — verified flags (Microsoft Learn).
+    // No direct child.kill — that only kills the leader and leaves grandchildren
+    // holding the stdout pipe (the wedge). The tree kill is the only stop.
+    expect(child.kill).not.toHaveBeenCalled();
+    // taskkill /PID <pid> /T /F — verified flags (Microsoft Learn).
     expect(spawnImpl).toHaveBeenCalledTimes(1);
     const [cmd, args] = spawnImpl.mock.calls[0];
     expect(cmd).toBe("taskkill");
     expect(args).toEqual(["/PID", "31337", "/T", "/F"]);
-    expect(res.escalated).toBe(true);
+    expect(res).toEqual({ signaled: true, killed: true, escalated: true });
   });
 
-  it("does NOT taskkill when the Windows child exits gracefully within the timeout", async () => {
+  it("reaps the tree even when the DIRECT child already appears exited (the wedge fix)", async () => {
+    // The direct child 'exited' (exitCode set) but a grandchild may still hold the
+    // pipe. The old code read this as graceful and skipped taskkill — wedging the
+    // lane. Now taskkill /T /F always runs so the whole tree is reaped.
     const child = fakeChild(42);
+    child.exitCode = 0;
     child.kill = vi.fn(() => true);
-    const spawnImpl = vi.fn();
+    const spawned = { on: vi.fn() };
+    const spawnImpl = vi.fn(() => spawned);
     const res = await killProcessTree(child, {
       platform: "win32",
       logger: silent,
       spawnImpl,
       sigintTimeoutMs: 10,
-      waitForExit: vi.fn(async () => true),
     });
-    expect(spawnImpl).not.toHaveBeenCalled();
-    expect(res.escalated).toBe(false);
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(spawnImpl.mock.calls[0][1]).toEqual(["/PID", "42", "/T", "/F"]);
+    expect(res.escalated).toBe(true);
   });
 
   it("never throws when taskkill spawn fails", async () => {
@@ -190,10 +195,9 @@ describe("killProcessTree — Windows taskkill escalation", () => {
       logger: { ...silent, warn: (m) => warns.push(m) },
       spawnImpl: () => { throw new Error("spawn taskkill ENOENT"); },
       sigintTimeoutMs: 5,
-      waitForExit: vi.fn(async () => false),
     });
-    expect(res.escalated).toBe(true);
-    expect(warns.join("")).toMatch(/taskkill escalation failed/);
+    expect(res).toEqual({ signaled: false, killed: false, escalated: false });
+    expect(warns.join("")).toMatch(/taskkill failed/);
   });
 });
 

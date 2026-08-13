@@ -13,14 +13,19 @@
 //     spawns the child `detached: true` — which makes it a PROCESS GROUP LEADER
 //     (its pgid === its pid) — and we signal the whole GROUP via the negative-pid
 //     form `process.kill(-pid, sig)`. That reaches every descendant in the group.
-//   • Windows: there is no per-tree signal. We escalate with the platform
-//     `taskkill /PID <pid> /T /F` command — `/T` ends the process AND its child
-//     processes (the tree), `/F` forces termination. Verified against Microsoft
-//     Learn's taskkill reference. The graceful stage is best-effort `child.kill()`
-//     on the direct process only (Node delivers SIGINT to the child on Windows; the
-//     signal cannot reach a tree there). The Windows path is NOT runtime-verifiable
-//     in this (POSIX) environment — re-verify on a real Windows host before claiming
-//     Windows support.
+//   • Windows: there is no per-tree signal, and no graceful one either — Node maps
+//     `child.kill(sig)` to a forceful TerminateProcess of the DIRECT child ONLY
+//     (Node docs: on Windows the signal is ignored and the process is killed like
+//     SIGKILL). Worse, that direct kill makes the child fire 'exit' while opencode's
+//     forked GRANDCHILDREN survive holding the inherited stdout pipe — a false
+//     "graceful exit" that (in the old two-stage code) skipped the tree kill, so the
+//     tree was never reaped, the spawner's 'close' never fired, and the wake (plus
+//     every task queued behind it on that cwd lane) wedged forever. So on Windows we
+//     do NOT attempt a graceful stage: we go STRAIGHT to `taskkill /PID <pid> /T /F`
+//     — `/T` ends the process AND its child processes (the tree), `/F` forces it.
+//     Verified against Microsoft Learn's taskkill reference. The Windows path is NOT
+//     runtime-verifiable in this (POSIX) environment — re-verify on a real Windows
+//     host before claiming Windows support.
 //
 // Contract (Tech Design): killProcessTree(child, { sigintTimeoutMs, platform,
 // logger, spawnImpl, nowKill }) → Promise<{ killed, escalated, signaled }>. It is
@@ -105,48 +110,41 @@ export async function killProcessTree(child, opts = {}) {
   }
   const pid = child.pid;
 
-  // --- Stage 1: graceful SIGINT ---
-  let signaled;
+  // --- Windows: straight to the tree kill (no graceful stage) ---
+  // `child.kill("SIGINT")` on Windows is a forceful direct-child terminate that leaves
+  // grandchildren alive holding the stdout pipe, and its 'exit' masquerades as a
+  // graceful exit — the false signal that used to skip the tree kill and wedge the
+  // lane. taskkill /T reaches the whole tree so the pipe closes and the spawner's
+  // 'close' fires; /F forces it. Never throws into the wake path.
   if (isWin) {
-    // Windows: deliver SIGINT to the direct child only (best-effort). Node maps
-    // SIGINT to a console-stop on Windows; it cannot reach a tree there.
     try {
-      signaled = child.kill?.("SIGINT") ?? false;
+      const tk = spawnImpl("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      tk?.on?.("error", (err) => logger.warn(`[Chorus] taskkill spawn error: ${err}`));
+      logger.info(`[Chorus] interrupt: taskkill /PID ${pid} /T /F (windows, whole tree)`);
+      return { signaled: true, killed: true, escalated: true };
     } catch (err) {
-      logger.warn(`[Chorus] child.kill("SIGINT") failed: ${err}`);
-      signaled = false;
+      logger.warn(`[Chorus] taskkill failed for pid ${pid}: ${err}`);
+      return { signaled: false, killed: false, escalated: false };
     }
-    logger.info(`[Chorus] interrupt: sent SIGINT to pid ${pid} (windows, direct child)`);
-  } else {
-    signaled = signalGroup(pid, "SIGINT", killImpl, logger);
-    logger.info(`[Chorus] interrupt: sent SIGINT to process group -${pid} (posix)`);
   }
 
-  // --- Wait for graceful exit within the window ---
+  // --- POSIX two-stage GROUP kill: graceful SIGINT to the whole group, then SIGKILL
+  // if it does not exit within the window. The negative-pid group form reaches every
+  // descendant, so a grandchild can't keep the stdout pipe open past the escalation. ---
+  const signaled = signalGroup(pid, "SIGINT", killImpl, logger);
+  logger.info(`[Chorus] interrupt: sent SIGINT to process group -${pid} (posix)`);
+
   const exitedGracefully = await waitForChildExit(child, sigintTimeoutMs, opts, logger);
   if (exitedGracefully) {
     logger.info(`[Chorus] interrupt: pid ${pid} exited gracefully within ${sigintTimeoutMs}ms`);
     return { signaled, killed: true, escalated: false };
   }
 
-  // --- Stage 2: forceful tree kill ---
-  if (isWin) {
-    // taskkill /PID <pid> /T /F — /T ends the tree (child processes), /F forces it.
-    try {
-      const tk = spawnImpl("taskkill", ["/PID", String(pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      // taskkill failures are logged, never thrown.
-      tk?.on?.("error", (err) => logger.warn(`[Chorus] taskkill spawn error: ${err}`));
-      logger.info(`[Chorus] interrupt: escalated — taskkill /PID ${pid} /T /F (windows)`);
-    } catch (err) {
-      logger.warn(`[Chorus] taskkill escalation failed for pid ${pid}: ${err}`);
-    }
-  } else {
-    signalGroup(pid, "SIGKILL", killImpl, logger);
-    logger.info(`[Chorus] interrupt: escalated — SIGKILL to process group -${pid} (posix)`);
-  }
+  signalGroup(pid, "SIGKILL", killImpl, logger);
+  logger.info(`[Chorus] interrupt: escalated — SIGKILL to process group -${pid} (posix)`);
   return { signaled, killed: true, escalated: true };
 }
 
